@@ -1,0 +1,11 @@
+# $Id: local.rules,v 1.11 2004/07/23 20:15:44 bmc Exp $
+# ----------------
+# LOCAL RULES
+# ----------------
+# This file intentionally does not come with signatures.  Put your local
+# additions here.
+
+alert tcp any any -> $HOME_NET any (msg:"NMAP NULL Scan Detected"; flags:0; classtype:network-scan; sid:1000001; rev:1;)
+alert icmp any any -> $HOME_NET any (msg:"ICMP Ping Detected"; itype:8; classtype:misc-activity; sid:1000005; rev:1;)
+alert tcp any any -> $HOME_NET any (msg:"XMAS Scan Detected"; flags:FPU; classtype:network-scan; sid:1000007; rev:1;)
+
