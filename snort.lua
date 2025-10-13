@@ -21,7 +21,7 @@
 
 -- HOME_NET and EXTERNAL_NET must be set now
 -- setup the network addresses you are protecting
-HOME_NET = 'any'
+HOME_NET = '192.168.1.0/24'
 
 -- set up the external network addresses.
 -- (leave as "any" in most situations)
@@ -280,18 +280,18 @@ end
 
 -- 4. Configure outputs
 
--- configure the alert_fast module to log to a file
+-- configure the fast logger for file output
 alert_fast = {
     file = true,
 }
 
--- configure the alert_console module to print to the screen
-alert_console = {}
+-- configure the console logger for screen output
+alert_console = {
+    output = 'stderr',
+}
 
--- activate the loggers by creating a list of their names
-loggers =
-{
+-- activate both loggers
+loggers = {
     'alert_console',
     'alert_fast',
 }
-

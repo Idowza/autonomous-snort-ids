@@ -12,7 +12,7 @@ This repository contains the code for an AI-enhanced Intrusion Detection System 
 *   **Programming Language:** Python 3
 *   **Core Libraries:** Pandas, Scikit-learn
 *   **Virtualization:** KVM/QEMU with Virt-Manager
-*   **Operating Systems:** Kali Linux (for both IDS and Attacker VMs)
+*   **Operating Systems:** Kali Linux (IDS) and Linux Mint (Attacker)
 *   **Future Integration:** Ollama with a local LLM (e.g., Llama 3)
 
 ## Getting Started
@@ -28,10 +28,10 @@ This repository contains the code for an AI-enhanced Intrusion Detection System 
 
 ### Lab Environment
 
-The lab consists of two Kali Linux VMs on an isolated network (192.168.100.0/24):
+The lab consists of two VMs on an isolated network:
 
-*   **Snort IDS VM:** `192.168.100.184`
-*   **Attacker VM:** `192.168.100.212`
+*   **Kali Snort IDS VM:** `192.168.1.44`
+*   **Linux Mint (Attacker) VM:** `192.168.1.6`
 
 ### Snort Configuration
 
@@ -44,19 +44,19 @@ Snort 3 is configured via `/etc/snort/snort.lua`. Ensure `HOME_NET` is set to yo
     # (Optional) Ensure log directory exists with correct permissions
     # sudo mkdir -p /var/log/snort && sudo chown snort:snort /var/log/snort
 
-    sudo snort -c /etc/snort/snort.lua -i <interface> -l /var/log/snort
+    sudo snort -c /etc/snort/snort.lua -R /etc/snort/rules/local.rules -i eth0 -k none -l /var/log/snort
     ```
 
 2.  **Generate Test Traffic:** From the Attacker VM, trigger the rules.
     ```bash
-    # Test ICMP Ping Rule
-    ping -c 1 192.168.100.184
+    # Ping Sweep Test
+    for i in {1..15}; do ping -c 1 192.168.1.44; done
 
-    # Test Nmap NULL Scan Rule
-    sudo nmap -sN 192.168.100.184
+    # Nmap FIN Scan Test
+    sudo nmap -sF 192.168.1.44
 
-    # Test Nmap Xmas Scan Rule
-    sudo nmap -sX 192.168.100.184
+    # SSH Brute Force Test
+    hydra -l root -P /usr/share/wordlists/rockyou.txt -t 5 ssh://192.168.1.44
     ```
 
 3.  **Run the AI Pipeline:** On the Snort VM, execute the Python scripts in order.
