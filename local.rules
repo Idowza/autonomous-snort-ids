@@ -5,7 +5,6 @@
 # This file intentionally does not come with signatures.  Put your local
 # additions here.
 
-alert tcp any any -> $HOME_NET any (msg:"NMAP NULL Scan Detected"; flags:0; classtype:network-scan; sid:1000001; rev:1;)
-alert icmp any any -> $HOME_NET any (msg:"ICMP Ping Detected"; itype:8; classtype:misc-activity; sid:1000005; rev:1;)
-alert tcp any any -> $HOME_NET any (msg:"XMAS Scan Detected"; flags:FPU; classtype:network-scan; sid:1000007; rev:1;)
-
+alert tcp any any -> $HOME_NET 22 (msg:"SSH Brute-Force Attempt"; flow:to_server,established; content:"SSH-", nocase; detection_filter: track by_src, count 5, seconds 60; sid:1000002; rev:1;)
+alert tcp any any -> $HOME_NET any (msg:"Nmap FIN Scan Attempt"; flags: F,1; sid:1000001; rev:1;)
+alert icmp any any -> $HOME_NET any (msg:"ICMP Ping Sweep Detected"; itype:8; icode:0; detection_filter: track by_src, count 2, seconds 10; sid:1000004; rev:1;)
