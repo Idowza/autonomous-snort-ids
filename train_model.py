@@ -63,3 +63,10 @@ if __name__ == "__main__":
     # Print the evaluation report (precision, recall, f1-score)
     report = classification_report(y_test, predictions, target_names=['Benign', 'Malicious'])
     print(report)
+
+import joblib
+
+# Save the trained model and the vectorizer to files
+joblib.dump(model, 'decision_tree_model.joblib')
+joblib.dump(vectorizer, 'tfidf_vectorizer.joblib')
+print("Model and vectorizer saved to disk.")
