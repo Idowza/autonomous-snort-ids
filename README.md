@@ -10,10 +10,10 @@ This repository contains the code for an AI-enhanced Intrusion Detection System 
 
 *   **IDS Engine:** Snort 3
 *   **Programming Language:** Python 3
-*   **Core Libraries:** Pandas, Scikit-learn
+*   **Core Libraries:** Pandas, Scikit-learn, Joblib
+*   **LLM Integration:** Ollama with Llama 3
 *   **Virtualization:** KVM/QEMU with Virt-Manager
 *   **Operating Systems:** Kali Linux (IDS) and Linux Mint (Attacker)
-*   **Future Integration:** Ollama with a local LLM (e.g., Llama 3)
 
 ## Getting Started
 
@@ -21,9 +21,10 @@ This repository contains the code for an AI-enhanced Intrusion Detection System 
 
 *   KVM/QEMU and Virt-Manager
 *   Python 3 and pip
+*   Ollama and the `llama3` model pulled (`ollama run llama3`)
 *   Required Python libraries:
     ```bash
-    pip3 install pandas scikit-learn
+    pip3 install pandas scikit-learn joblib ollama
     ```
 
 ### Lab Environment
@@ -47,33 +48,40 @@ Snort 3 is configured via `/etc/snort/snort.lua`. Ensure `HOME_NET` is set to yo
     sudo snort -c /etc/snort/snort.lua -R /etc/snort/rules/local.rules -i eth0 -k none -l /var/log/snort
     ```
 
-2.  **Generate Test Traffic:** From the Attacker VM, trigger the rules.
+2.  **Generate Test Traffic:** From the Attacker VM, trigger the existing rules.
     ```bash
-    # Ping Sweep Test
+    # Ping Sweep, Nmap, and SSH Brute Force tests
     for i in {1..15}; do ping -c 1 192.168.1.44; done
-
-    # Nmap FIN Scan Test
     sudo nmap -sF 192.168.1.44
-
-    # SSH Brute Force Test
     hydra -l root -P /usr/share/wordlists/rockyou.txt -t 5 ssh://192.168.1.44
     ```
 
 3.  **Run the AI Pipeline:** On the Snort VM, execute the Python scripts in order.
     ```bash
+    # 1. Parse Snort logs into a structured CSV file
     python3 parse_logs.py
+    
+    # 2. Train the model and save it to disk
     python3 train_model.py
+    
+    # 3. Simulate a new threat and generate a rule suggestion
+    python3 suggest_rule.py
     ```
-    This will parse the logs, preprocess the data, and train a Decision Tree model, outputting a performance report.
+    This will parse logs, train a model, and then use the model to detect a simulated new threat, for which it will generate a new Snort rule using Llama 3.
 
 ## Project Status
 
 - [x] **Phase 1: IDS Deployment & Rule Creation** - Completed
 - [x] **Phase 2: AI-Enhanced Detection** - Data pipeline and baseline model complete.
+- [x] **Phase 3: Autonomous Rule Suggestion** - Initial implementation complete.
+    - [x] Installed Ollama and the `ollama` Python library.
+    - [x] Pulled the `llama3` model.
+    - [x] Updated `train_model.py` to save the trained model and vectorizer.
+    - [x] Created `suggest_rule.py` to generate new rules for unseen threats using the LLM.
 - [ ] **Next Steps:**
-    - [x] Generate benign network traffic and label it (0) to create a balanced dataset.
-    - [x] Re-train and evaluate the model on the new balanced dataset.
-    - Begin development on the autonomous rule suggestion component (Part C).
+    - [ ] Refine the prompt engineering for more accurate and robust rule generation.
+    - [ ] Integrate the suggested rules back into the Snort pipeline automatically for analyst review.
+    - [ ] Expand the dataset with more diverse benign and malicious traffic to improve model accuracy.
 
 ## Future Work
 
