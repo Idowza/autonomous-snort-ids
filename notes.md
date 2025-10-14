@@ -22,3 +22,8 @@ sudo tail -f /var/log/snort/alert_fast.txt
 ```bash
 sudo snort -c /etc/snort/snort.lua -R /etc/snort/rules/local.rules -i eth0 -k none -l /var/log/snort
 ```
+
+# Install scikit-learn
+```bash
+sudo apt-get install python3-sklearn python3-sklearn-lib python-sklearn-doc
+```

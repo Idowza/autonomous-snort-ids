@@ -61,24 +61,23 @@ Snort 3 is configured via `/etc/snort/snort.lua`. Ensure `HOME_NET` is set to yo
 
 3.  **Run the AI Pipeline:** On the Snort VM, execute the Python scripts in order.
     ```bash
-    python3 log_parser.py
-    python3 data_preprocessor.py
-    python3 model_trainer.py
+    python3 parse_logs.py
+    python3 train_model.py
     ```
-    This will parse the logs, preprocess the data, and train a Random Forest model, outputting a performance report.
+    This will parse the logs, preprocess the data, and train a Decision Tree model, outputting a performance report.
 
 ## Project Status
 
 - [x] **Phase 1: IDS Deployment & Rule Creation** - Completed
 - [x] **Phase 2: AI-Enhanced Detection** - Data pipeline and baseline model complete.
 - [ ] **Next Steps:**
-    - Generate benign network traffic and label it (0) to create a balanced dataset.
-    - Re-train and evaluate the model on the new balanced dataset.
+    - [x] Generate benign network traffic and label it (0) to create a balanced dataset.
+    - [x] Re-train and evaluate the model on the new balanced dataset.
     - Begin development on the autonomous rule suggestion component (Part C).
 
 ## Future Work
 
-The immediate next step is to address the data imbalance in the training set by generating and labeling benign traffic. The final phase of the project will focus on building the autonomous rule generation system by integrating a local Large Language Model (LLM) with Ollama.
+With the dataset now balanced and the model re-trained/evaluated, the focus shifts to building the autonomous rule generation system. The next major milestone is integrating a local Large Language Model (LLM) with Ollama to propose, validate, and iterate on new Snort rules based on observed alerts and model insights.
 
 ## License
 
