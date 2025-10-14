@@ -27,3 +27,8 @@ sudo snort -c /etc/snort/snort.lua -R /etc/snort/rules/local.rules -i eth0 -k no
 ```bash
 sudo apt-get install python3-sklearn python3-sklearn-lib python-sklearn-doc
 ```
+
+# Run Llama 3 with Ollama
+```bash
+ollama run llama3
+```
