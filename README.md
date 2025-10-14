@@ -12,14 +12,12 @@ This repository contains the code for an AI-enhanced Intrusion Detection System 
 *   **Programming Language:** Python 3
 *   **Core Libraries:** Pandas, Scikit-learn, Joblib
 *   **LLM Integration:** Ollama with Llama 3
-*   **Virtualization:** KVM/QEMU with Virt-Manager
 *   **Operating Systems:** Kali Linux (IDS) and Linux Mint (Attacker)
 
 ## Getting Started
 
 ### Prerequisites
 
-*   KVM/QEMU and Virt-Manager
 *   Python 3 and pip
 *   Ollama and the `llama3` model pulled (`ollama run llama3`)
 *   Required Python libraries:
@@ -29,10 +27,10 @@ This repository contains the code for an AI-enhanced Intrusion Detection System 
 
 ### Lab Environment
 
-The lab consists of two VMs on an isolated network:
+The lab consists of two bare metal machines on an isolated network:
 
-*   **Kali Snort IDS VM:** `192.168.1.44`
-*   **Linux Mint (Attacker) VM:** `192.168.1.6`
+*   **Kali Snort IDS Machine:** `192.168.1.44`
+*   **Linux Mint (Attacker) Machine:** `192.168.1.6`
 
 ### Snort Configuration
 
@@ -40,7 +38,7 @@ Snort 3 is configured via `/etc/snort/snort.lua`. Ensure `HOME_NET` is set to yo
 
 ### How to Run
 
-1.  **Start the IDS:** On the Snort VM, run Snort to begin monitoring traffic.
+1.  **Start the IDS:** On the Snort machine, run Snort to begin monitoring traffic.
     ```bash
     # (Optional) Ensure log directory exists with correct permissions
     # sudo mkdir -p /var/log/snort && sudo chown snort:snort /var/log/snort
@@ -48,7 +46,7 @@ Snort 3 is configured via `/etc/snort/snort.lua`. Ensure `HOME_NET` is set to yo
     sudo snort -c /etc/snort/snort.lua -R /etc/snort/rules/local.rules -i eth0 -k none -l /var/log/snort
     ```
 
-2.  **Generate Test Traffic:** From the Attacker VM, trigger the existing rules.
+2.  **Generate Test Traffic:** From the Attacker machine, trigger the existing rules.
     ```bash
     # Ping Sweep, Nmap, and SSH Brute Force tests
     for i in {1..15}; do ping -c 1 192.168.1.44; done
@@ -56,7 +54,7 @@ Snort 3 is configured via `/etc/snort/snort.lua`. Ensure `HOME_NET` is set to yo
     hydra -l root -P /usr/share/wordlists/rockyou.txt -t 5 ssh://192.168.1.44
     ```
 
-3.  **Run the AI Pipeline:** On the Snort VM, execute the Python scripts in order.
+3.  **Run the AI Pipeline:** On the Snort machine, execute the Python scripts in order.
     ```bash
     # 1. Parse Snort logs into a structured CSV file
     python3 parse_logs.py
