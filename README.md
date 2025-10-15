@@ -80,6 +80,7 @@ Snort 3 is configured via `/etc/snort/snort.lua`. Ensure `HOME_NET` is set to yo
     - [ ] Refine the prompt engineering for more accurate and robust rule generation.
     - [ ] Integrate the suggested rules back into the Snort pipeline automatically for analyst review.
     - [ ] Expand the dataset with more diverse benign and malicious traffic to improve model accuracy.
+    - [ ] Research and implement a fully automated pipeline, including forwarding Snort alerts to the AI machine and running the Python scripts to generate new rules for approval.
 
 ## Future Work
 
