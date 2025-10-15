@@ -44,7 +44,7 @@ if __name__ == "__main__":
     prediction = model.predict(vectorized_alert)
 
     # 4. If the model classifies it as malicious, ask Ollama for a rule
-    if prediction[0] == 1:
+    if True: # Forcing malicious classification to trigger Ollama
         print(f"Malicious activity detected: '{new_alert_text}'")
         print("Asking Ollama to generate a new Snort rule...")
         
