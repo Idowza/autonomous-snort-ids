@@ -32,3 +32,8 @@ sudo apt-get install python3-sklearn python3-sklearn-lib python-sklearn-doc
 ```bash
 ollama run llama3
 ```
+
+# View live log on Mint machine (from Kali)
+```bash
+sudo tail -f /var/log/snort_alerts.log
+```
