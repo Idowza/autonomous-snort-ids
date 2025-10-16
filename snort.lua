@@ -278,20 +278,13 @@ if ( tweaks ~= nil ) then
     include(tweaks .. '.lua')
 end
 
--- 4. Configure outputs
-
--- configure the fast logger for file output
-alert_fast = {
-    file = true,
+-- Configure syslog to send alerts using a specific 'facility'
+alert_syslog = {
+    facility = 'local5',
+    level = 'alert',
 }
 
--- configure the console logger for screen output
-alert_console = {
-    output = 'stderr',
-}
-
--- activate both loggers
+-- Activate ONLY the syslog logger
 loggers = {
-    'alert_console',
-    'alert_fast',
+    'alert_syslog',
 }
