@@ -71,7 +71,7 @@ Snort 3 is configured via `/etc/snort/snort.lua`. Ensure `HOME_NET` is set to yo
 
 - [x] **Phase 1: IDS Deployment & Rule Creation** - Completed
 - [x] **Phase 2: AI-Enhanced Detection** - Data pipeline and baseline model complete.
-- [x] **Phase 3: Autonomous Rule Suggestion** - Initial implementation complete.
+- [x] **Phase 3: Autonomous Rule Suggestion** - In progress. Refinements and fine-tuning are being done.
     - [x] Installed Ollama and the `ollama` Python library.
     - [x] Pulled the `llama3` model.
     - [x] Updated `train_model.py` to save the trained model and vectorizer.
