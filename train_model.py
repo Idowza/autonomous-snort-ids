@@ -7,7 +7,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import StandardScaler
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, IsolationForest
 from sklearn.metrics import classification_report
 import joblib
 
@@ -27,16 +27,14 @@ def load_and_transform_cicids_from_folder(folder_path):
     for filepath in all_csv_files:
         print(f"  - Processing {os.path.basename(filepath)}")
         try:
-            # Added low_memory=False to suppress the DtypeWarning
             df = pd.read_csv(filepath, encoding='latin1', low_memory=False)
         except Exception as e:
             print(f"    - Could not read file {os.path.basename(filepath)} due to error: {e}")
             continue
 
         df.columns = df.columns.str.strip()
-        # Ensure the required columns exist before trying to process
         if 'Destination Port' not in df.columns or 'Label' not in df.columns:
-            print(f"    - Skipping file {os.path.basename(filepath)} because it's missing 'Destination Port' or 'Label' columns.")
+            print(f"    - Skipping file {os.path.basename(filepath)} because it's missing required columns.")
             continue
             
         df = df[['Destination Port', 'Label']]
@@ -84,27 +82,24 @@ def engineer_features(df):
 
 # --- Main Execution ---
 if __name__ == "__main__":
-    # 1. Load datasets
+    # 1. Load and combine datasets
     try:
         snort_data = pd.read_csv('snort_alerts.csv')
         snort_data = label_snort_alerts(snort_data)
         print(f"Loaded {len(snort_data)} records from snort_alerts.csv")
-        # **FIX**: Keep only the columns that both datasets will have
         snort_data = snort_data[['message', 'dest_port', 'label']]
     except FileNotFoundError:
-        print("Warning: snort_alerts.csv not found. Proceeding with public data only.")
+        print("Warning: snort_alerts.csv not found.")
         snort_data = pd.DataFrame()
 
     cicids_data = load_and_transform_cicids_from_folder('cicids_data')
-    
-    # Now both dataframes have the same columns, so concatenation is safe
     combined_data = pd.concat([snort_data, cicids_data], ignore_index=True)
 
     if combined_data.empty:
-        print("Error: No data available to train on. Please check your data files.")
+        print("Error: No data available to train on.")
         exit()
 
-    # 2. Engineer Features
+    # 2. Engineer and clean features
     combined_data = engineer_features(combined_data)
     combined_data['dest_port'] = pd.to_numeric(combined_data['dest_port'], errors='coerce')
     combined_data.dropna(inplace=True)
@@ -112,39 +107,50 @@ if __name__ == "__main__":
     
     print(f"\nTotal combined dataset size after cleaning: {len(combined_data)} records.")
     
-    # 3. Prepare data for the model
+    # 3. Define the shared preprocessor for both models
     text_features = 'message'
     numeric_features = ['dest_port', 'message_length', 'special_char_count', 'keyword_count']
-
+    
     preprocessor = ColumnTransformer(
         transformers=[
             ('num', StandardScaler(), numeric_features),
             ('text', TfidfVectorizer(), text_features)
-        ])
+        ], remainder='passthrough')
 
-    model_pipeline = Pipeline(steps=[('preprocessor', preprocessor),
-                                     ('classifier', RandomForestClassifier(random_state=42))])
-
+    # --- CLASSIFIER TRAINING ---
+    print("\n--- Training Classifier (Random Forest) ---")
+    classifier_pipeline = Pipeline(steps=[('preprocessor', preprocessor),
+                                          ('classifier', RandomForestClassifier(random_state=42))])
+    
     X = combined_data[numeric_features + [text_features]]
     y = combined_data['label']
-
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
-    )
-
-    # 4. Train the pipeline
-    print("\nTraining the Random Forest model on the full combined dataset...")
-    model_pipeline.fit(X_train, y_train)
-    print("Model training complete.")
-    print("-" * 40)
-
-    # 5. Evaluate the model
-    print("Evaluating model performance...")
-    predictions = model_pipeline.predict(X_test)
+    
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+    
+    classifier_pipeline.fit(X_train, y_train)
+    print("Classifier training complete.")
+    
+    print("\nEvaluating classifier performance...")
+    predictions = classifier_pipeline.predict(X_test)
     report = classification_report(y_test, predictions, target_names=['Benign', 'Malicious'])
     print(report)
+    
+    joblib.dump(classifier_pipeline, 'random_forest_pipeline.joblib')
+    print("Classifier pipeline saved to 'random_forest_pipeline.joblib'")
 
-    # 6. Save the final pipeline
-    joblib.dump(model_pipeline, 'random_forest_pipeline.joblib')
-    print("\nEntire model pipeline saved to 'random_forest_pipeline.joblib'")
-
+    # --- ANOMALY DETECTOR TRAINING ---
+    print("\n--- Training Anomaly Detector (Isolation Forest) ---")
+    
+    # Isolate only the benign data for training
+    benign_data = combined_data[combined_data['label'] == 0]
+    X_benign = benign_data[numeric_features + [text_features]]
+    
+    anomaly_pipeline = Pipeline(steps=[('preprocessor', preprocessor),
+                                       ('detector', IsolationForest(random_state=42, contamination='auto'))])
+    
+    print(f"Training anomaly detector on {len(X_benign)} benign records...")
+    anomaly_pipeline.fit(X_benign)
+    print("Anomaly detector training complete.")
+    
+    joblib.dump(anomaly_pipeline, 'isolation_forest_pipeline.joblib')
+    print("Anomaly detector pipeline saved to 'isolation_forest_pipeline.joblib'")
