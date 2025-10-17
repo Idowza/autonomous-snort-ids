@@ -27,12 +27,18 @@ def load_and_transform_cicids_from_folder(folder_path):
     for filepath in all_csv_files:
         print(f"  - Processing {os.path.basename(filepath)}")
         try:
-            df = pd.read_csv(filepath, encoding='latin1')
+            # Added low_memory=False to suppress the DtypeWarning
+            df = pd.read_csv(filepath, encoding='latin1', low_memory=False)
         except Exception as e:
             print(f"    - Could not read file {os.path.basename(filepath)} due to error: {e}")
             continue
 
         df.columns = df.columns.str.strip()
+        # Ensure the required columns exist before trying to process
+        if 'Destination Port' not in df.columns or 'Label' not in df.columns:
+            print(f"    - Skipping file {os.path.basename(filepath)} because it's missing 'Destination Port' or 'Label' columns.")
+            continue
+            
         df = df[['Destination Port', 'Label']]
         df.rename(columns={'Destination Port': 'dest_port', 'Label': 'cicids_label'}, inplace=True)
 
@@ -40,7 +46,6 @@ def load_and_transform_cicids_from_folder(folder_path):
             'PortScan': 'Nmap Scan Attempt', 'SSH-Patator': 'SSH Brute-Force Attempt',
             'FTP-Patator': 'FTP Brute-Force Attempt', 'DoS Hulk': 'Denial of Service Attack',
             'DDoS': 'Denial of Service Attack'
-            # Add other mappings as you discover them in other files
         }
         df['message'] = df['cicids_label'].map(label_to_message)
         df['message'].fillna('Generic Attack Detected', inplace=True)
@@ -84,11 +89,15 @@ if __name__ == "__main__":
         snort_data = pd.read_csv('snort_alerts.csv')
         snort_data = label_snort_alerts(snort_data)
         print(f"Loaded {len(snort_data)} records from snort_alerts.csv")
+        # **FIX**: Keep only the columns that both datasets will have
+        snort_data = snort_data[['message', 'dest_port', 'label']]
     except FileNotFoundError:
         print("Warning: snort_alerts.csv not found. Proceeding with public data only.")
         snort_data = pd.DataFrame()
 
     cicids_data = load_and_transform_cicids_from_folder('cicids_data')
+    
+    # Now both dataframes have the same columns, so concatenation is safe
     combined_data = pd.concat([snort_data, cicids_data], ignore_index=True)
 
     if combined_data.empty:
