@@ -1,5 +1,6 @@
 import re
 import csv
+import os
 
 def parse_snort_log(log_file):
     """
@@ -57,4 +58,16 @@ def save_to_csv(alerts, csv_file):
 if __name__ == "__main__":
     parsed_alerts = parse_snort_log('/var/log/snort_alerts.log')
     if parsed_alerts:
-        save_to_csv(parsed_alerts, 'snort_alerts.csv')
+        # Get the user's home directory
+        home_dir = os.path.expanduser('~')
+        # Define the downloads folder path
+        downloads_folder = os.path.join(home_dir, 'Downloads')
+        
+        # Create the downloads folder if it doesn't exist
+        if not os.path.exists(downloads_folder):
+            os.makedirs(downloads_folder)
+            
+        # Define the full path for the CSV file
+        csv_path = os.path.join(downloads_folder, 'snort_alerts.csv')
+        
+        save_to_csv(parsed_alerts, csv_path)
