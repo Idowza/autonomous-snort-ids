@@ -5,7 +5,7 @@ import shlex
 import sys # For exiting early
 
 # --- Configuration ---
-KALI_USER = "your_kali_username"  # Replace with your actual username on the Kali machine
+KALI_USER = "kali"  # Replace with your actual username on the Kali machine
 KALI_IP = "192.168.1.44"
 REMOTE_RULES_FILE = "/etc/snort/rules/local.rules"
 SUGGESTED_RULES_FILE = "suggested_rules.txt"
