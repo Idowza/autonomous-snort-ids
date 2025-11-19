@@ -103,12 +103,5 @@ This project is licensed under the MIT License - see the `LICENSE` file for deta
 
 ## Acknowledgments
 
-I would like to thank my capstone advisor, Dr. Zhang,
-for his guidance and support throughout this project. I
-
-also wish to acknowledge the Canadian Institute for Cy-
-bersecurity (CIC) for providing the CIC-IDS-2017 dataset,
-
-and the open-source communities behind Snort, Ollama,
-and Scikit-learn, whose tools made this project possible.
+I would like to thank my capstone advisor, Dr. Zhang, for his guidance and support throughout this project. I also wish to acknowledge the Canadian Institute for Cybersecurity (CIC) for providing the CIC-IDS-2017 dataset, and the open-source communities behind Snort, Ollama, and Scikit-learn, whose tools made this project possible.
 
