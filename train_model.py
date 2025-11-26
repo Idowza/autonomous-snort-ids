@@ -12,11 +12,11 @@ from sklearn.metrics import classification_report
 import joblib
 
 # --- Configuration ---
-DATASET_ROOT = 'datasets'
+# Use absolute path to be safe
+DATASET_ROOT = os.path.abspath('datasets')
 
 def engineer_features(df):
     """ Standardizes and engineers features for all datasets. """
-    # Ensure message is string and handle missing values
     df['message'] = df['message'].astype(str).fillna('Unknown')
     
     # 1. Message Length
@@ -31,12 +31,12 @@ def engineer_features(df):
     keyword_pattern = '|'.join(keywords)
     df['keyword_count'] = df['message'].str.lower().str.count(keyword_pattern)
     
-    # 4. Clean Port: Force to numeric, turn errors (like '0x20') into 0
+    # 4. Clean Port
     df['dest_port'] = pd.to_numeric(df['dest_port'], errors='coerce').fillna(0).astype(int)
     
     return df[['message', 'dest_port', 'message_length', 'special_char_count', 'keyword_count', 'label']]
 
-# --- Custom Loaders for Each Dataset Type ---
+# --- Custom Loaders ---
 
 def load_cicids2017(folder_path):
     print(f"\n[+] Loading CIC-IDS-2017 from {folder_path}...")
@@ -45,13 +45,19 @@ def load_cicids2017(folder_path):
     for f in files:
         try:
             # 2017 uses "Destination Port" and "Label"
-            df = pd.read_csv(f, usecols=['Destination Port', 'Label'], encoding='latin1', low_memory=False)
-            df.rename(columns={'Destination Port': 'dest_port', 'Label': 'raw_label'}, inplace=True)
+            df = pd.read_csv(f, encoding='latin1', low_memory=False)
             
-            # Use the raw label (e.g., "DoS Hulk") as the alert message
+            # Normalize columns based on variations
+            if 'Destination Port' in df.columns:
+                df.rename(columns={'Destination Port': 'dest_port', 'Label': 'raw_label'}, inplace=True)
+            elif ' Destination Port' in df.columns: # Handle leading space
+                 df.rename(columns={' Destination Port': 'dest_port', ' Label': 'raw_label'}, inplace=True)
+            else:
+                continue
+
             df['message'] = df['raw_label']
-            df['label'] = df['raw_label'].apply(lambda x: 0 if x == 'BENIGN' else 1)
-            dfs.append(df)
+            df['label'] = df['raw_label'].apply(lambda x: 0 if str(x).strip() == 'BENIGN' else 1)
+            dfs.append(df[['dest_port', 'message', 'label']])
         except Exception: continue
     return pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
 
@@ -61,13 +67,17 @@ def load_cicids2018(folder_path):
     dfs = []
     for f in files:
         try:
-            # 2018 uses "Dst Port" and "Label"
-            df = pd.read_csv(f, usecols=['Dst Port', 'Label'], encoding='latin1', low_memory=False)
-            df.rename(columns={'Dst Port': 'dest_port', 'Label': 'raw_label'}, inplace=True)
+            df = pd.read_csv(f, encoding='latin1', low_memory=False)
+            
+            # 2018 uses "Dst Port"
+            if 'Dst Port' in df.columns:
+                df.rename(columns={'Dst Port': 'dest_port', 'Label': 'raw_label'}, inplace=True)
+            else:
+                continue
             
             df['message'] = df['raw_label']
-            df['label'] = df['raw_label'].apply(lambda x: 0 if x == 'Benign' else 1)
-            dfs.append(df)
+            df['label'] = df['raw_label'].apply(lambda x: 0 if str(x).strip() == 'Benign' else 1)
+            dfs.append(df[['dest_port', 'message', 'label']])
         except Exception: continue
     return pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
 
@@ -75,28 +85,30 @@ def load_unsw_nb15(folder_path):
     print(f"\n[+] Loading UNSW-NB15 from {folder_path}...")
     files = glob.glob(os.path.join(folder_path, '*.csv'))
     dfs = []
+    
+    # UNSW-NB15 raw CSVs have NO headers. We must provide them.
+    # These are the standard column names for the 4 CSV files.
+    unsw_columns = [
+        'srcip', 'sport', 'dstip', 'dsport', 'proto', 'state', 'dur', 'sbytes', 'dbytes', 
+        'sttl', 'dttl', 'sloss', 'dloss', 'service', 'Sload', 'Dload', 'Spkts', 'Dpkts', 
+        'swin', 'dwin', 'stcpb', 'dtcpb', 'smeansz', 'dmeansz', 'trans_depth', 
+        'res_bdy_len', 'Sjit', 'Djit', 'Stime', 'Ltime', 'Sintpkt', 'Dintpkt', 
+        'tcprtt', 'synack', 'ackdat', 'is_sm_ips_ports', 'ct_state_ttl', 
+        'ct_flw_http_mthd', 'is_ftp_login', 'ct_ftp_cmd', 'ct_srv_src', 
+        'ct_srv_dst', 'ct_dst_ltm', 'ct_src_ ltm', 'ct_src_dport_ltm', 
+        'ct_dst_sport_ltm', 'ct_dst_src_ltm', 'attack_cat', 'Label'
+    ]
+
     for f in files:
         try:
-            # UNSW uses "dsport" and "attack_cat"
-            # We load 'Label' (0/1) as well to be safe
-            df = pd.read_csv(f, encoding='latin1', low_memory=False)
+            # Read with header=None and names=unsw_columns
+            df = pd.read_csv(f, header=None, names=unsw_columns, encoding='latin1', low_memory=False)
             
-            # Normalize Port Column
-            if 'dsport' in df.columns:
-                df.rename(columns={'dsport': 'dest_port'}, inplace=True)
-            elif 'dst_port' in df.columns:
-                df.rename(columns={'dst_port': 'dest_port'}, inplace=True)
-            else:
-                continue
-
-            # Normalize Message/Label
-            if 'attack_cat' in df.columns:
-                df['message'] = df['attack_cat'].fillna('Benign Traffic')
-                # UNSW has a 'Label' column where 0 is normal, 1 is attack
-                if 'Label' in df.columns:
-                    df['label'] = df['Label']
-                else:
-                    df['label'] = df['message'].apply(lambda x: 0 if 'benign' in str(x).lower() else 1)
+            df.rename(columns={'dsport': 'dest_port'}, inplace=True)
+            
+            df['message'] = df['attack_cat'].fillna('Benign Traffic')
+            # Label column: 0 for normal, 1 for attack
+            df['label'] = df['Label']
             
             dfs.append(df[['dest_port', 'message', 'label']])
         except Exception as e: 
@@ -108,7 +120,7 @@ def load_local_snort():
     print("\n[+] Loading Local Snort Logs...")
     try:
         df = pd.read_csv('snort_alerts.csv')
-        df['label'] = 1 # Assume local alerts are malicious
+        df['label'] = 1 
         return df[['message', 'dest_port', 'label']]
     except FileNotFoundError:
         return pd.DataFrame()
@@ -131,16 +143,13 @@ if __name__ == "__main__":
         exit()
 
     print(f"\n[+] Total Records Loaded: {len(full_data)}")
-
-    # Check Class Distribution
     print(f"    Class Distribution: {full_data['label'].value_counts().to_dict()}")
 
     # 2. Engineer Features
     print("[-] Engineering features...")
     full_data = engineer_features(full_data)
     
-    # 3. Downsample if necessary (To prevent RAM crash)
-    # If you have > 2 million rows, we sample to keep it manageable
+    # 3. Downsample
     if len(full_data) > 2000000:
         print(f"    Dataset is large ({len(full_data)}). Sampling 2M records for training...")
         train_df = full_data.sample(n=2000000, random_state=42)
@@ -165,11 +174,9 @@ if __name__ == "__main__":
     X = train_df[numeric_features + [text_features]]
     y = train_df['label']
     
-    # Use stratify to ensure both classes are in test set if possible
     try:
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y, random_state=42)
     except ValueError:
-        print("    Warning: Cannot stratify (one class is too small). Using random split.")
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
     classifier.fit(X_train, y_train)
@@ -192,7 +199,6 @@ if __name__ == "__main__":
     benign_data = train_df[train_df['label'] == 0]
     
     if not benign_data.empty:
-        # Isolate forest doesn't need millions of rows to learn "normal"
         if len(benign_data) > 500000:
             benign_sample = benign_data.sample(n=500000, random_state=42)
         else:
