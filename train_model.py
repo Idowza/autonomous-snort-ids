@@ -53,11 +53,15 @@ def engineer_features(df):
     return df[['message', 'dest_port', 'message_length', 'special_char_count', 'keyword_count', 'label']]
 
 def find_column(df, candidates):
-    """ Helper to find a column name case-insensitively. """
-    cols = {c.lower().strip(): c for c in df.columns}
+    """ Helper to find a column name case-insensitively and ignoring underscores/spaces. """
+    # Normalize column names by lowercasing and replacing underscores with spaces for comparison
+    cols_map = {c.lower().strip().replace('_', ''): c for c in df.columns}
+    
     for cand in candidates:
-        if cand.lower() in cols:
-            return cols[cand.lower()]
+        # Normalize candidate in the same way
+        cand_norm = cand.lower().strip().replace('_', '').replace(' ', '')
+        if cand_norm in cols_map:
+            return cols_map[cand_norm]
     return None
 
 # --- Loaders ---
@@ -73,9 +77,11 @@ def load_and_process_cicids2017(folder_path):
 
     for f in files:
         try:
-            # Read headers first to check columns
+            # Read headers first
             header = pd.read_csv(f, nrows=0, encoding='latin1')
-            port_col = find_column(header, ['Destination Port', 'Dst Port'])
+            
+            # Candidates include standard names and the underscore versions you found
+            port_col = find_column(header, ['Destination Port', 'Destination_Port', 'Dst Port'])
             label_col = find_column(header, ['Label', 'Label '])
 
             if not port_col or not label_col:
@@ -89,7 +95,7 @@ def load_and_process_cicids2017(folder_path):
 
             df.rename(columns={port_col: 'dest_port', label_col: 'raw_label'}, inplace=True)
             df['message'] = df['raw_label']
-            df['label'] = df['raw_label'].apply(lambda x: 0 if str(x).strip() == 'BENIGN' else 1)
+            df['label'] = df['raw_label'].astype(str).apply(lambda x: 0 if x.strip().upper() == 'BENIGN' else 1)
             
             df = engineer_features(df)
             dfs.append(df)
@@ -112,8 +118,10 @@ def load_and_process_cicids2018(folder_path):
     for f in files:
         try:
             header = pd.read_csv(f, nrows=0, encoding='latin1')
-            port_col = find_column(header, ['Dst Port', 'Destination Port', 'dp'])
-            label_col = find_column(header, ['Label'])
+            
+            # Candidates include 'dst_port' which was in your log output
+            port_col = find_column(header, ['Dst Port', 'dst_port', 'Destination Port', 'dp'])
+            label_col = find_column(header, ['Label', 'label'])
             
             if not port_col or not label_col:
                  print(f"    [SKIP] {os.path.basename(f)} missing required columns. Found: {header.columns.tolist()}")
@@ -126,7 +134,7 @@ def load_and_process_cicids2018(folder_path):
 
             df.rename(columns={port_col: 'dest_port', label_col: 'raw_label'}, inplace=True)
             df['message'] = df['raw_label']
-            df['label'] = df['raw_label'].apply(lambda x: 0 if str(x).strip() == 'Benign' else 1)
+            df['label'] = df['raw_label'].astype(str).apply(lambda x: 0 if x.strip().upper() == 'BENIGN' else 1)
             
             df = engineer_features(df)
             dfs.append(df)
@@ -146,7 +154,6 @@ def load_and_process_unsw_nb15(folder_path):
         print(f"    [WARNING] No files found in {folder_path}")
         return pd.DataFrame()
 
-    # Standard UNSW headers (if missing)
     unsw_columns = [
         'srcip', 'sport', 'dstip', 'dsport', 'proto', 'state', 'dur', 'sbytes', 'dbytes', 
         'sttl', 'dttl', 'sloss', 'dloss', 'service', 'Sload', 'Dload', 'Spkts', 'Dpkts', 
@@ -160,39 +167,43 @@ def load_and_process_unsw_nb15(folder_path):
 
     for f in files:
         try:
-            # First, try to detect if headers exist by reading first line
             peek = pd.read_csv(f, nrows=5, encoding='latin1')
             
-            # Check if 'dsport' or 'dst_port' is in the columns inferred by pandas
-            if 'dsport' in peek.columns or 'dst_port' in peek.columns:
+            # Check for headers using the robust finder
+            port_col = find_column(peek, ['dsport', 'dst_port', 'Destination Port'])
+            
+            if port_col:
                  # Headers EXIST
-                 print(f"    [INFO] {os.path.basename(f)} appears to have headers.")
+                 print(f"    [INFO] {os.path.basename(f)} has headers. Loading...")
                  df = pd.read_csv(f, encoding='latin1', low_memory=False)
             else:
-                 # Headers MISSING (Raw files)
-                 print(f"    [INFO] {os.path.basename(f)} appears to be raw (no headers). Applying standard UNSW headers.")
+                 # Headers MISSING
+                 print(f"    [INFO] {os.path.basename(f)} appears to be raw. Applying headers.")
                  df = pd.read_csv(f, header=None, names=unsw_columns, encoding='latin1', low_memory=False)
 
             if len(df) > 50000:
                 df = df.sample(frac=SAMPLE_RATE, random_state=42)
 
-            # Normalize
-            if 'dsport' in df.columns: df.rename(columns={'dsport': 'dest_port'}, inplace=True)
-            elif 'dst_port' in df.columns: df.rename(columns={'dst_port': 'dest_port'}, inplace=True)
+            # Normalize Port
+            port_col_final = find_column(df, ['dsport', 'dst_port'])
+            if port_col_final:
+                df.rename(columns={port_col_final: 'dest_port'}, inplace=True)
             else:
-                 print(f"    [SKIP] {os.path.basename(f)} missing port column. Found: {df.columns.tolist()}")
+                 print(f"    [SKIP] {os.path.basename(f)} missing port column.")
                  continue
 
-            if 'attack_cat' in df.columns:
-                df['message'] = df['attack_cat'].fillna('Benign Traffic')
+            # Normalize Message/Label
+            msg_col = find_column(df, ['attack_cat'])
+            if msg_col:
+                df['message'] = df[msg_col].fillna('Benign Traffic')
             else:
                 df['message'] = 'Unknown Activity'
 
-            if 'Label' in df.columns:
-                df['label'] = df['Label']
+            label_col = find_column(df, ['Label', 'label'])
+            if label_col:
+                df['label'] = df[label_col]
             else:
-                # Fallback if Label column missing
-                df['label'] = df['message'].apply(lambda x: 0 if 'benign' in str(x).lower() else 1)
+                df['label'] = df['message'].astype(str).apply(lambda x: 0 if 'benign' in x.lower() else 1)
             
             df = engineer_features(df)
             dfs.append(df)
@@ -217,10 +228,8 @@ def load_local_snort():
 
 if __name__ == "__main__":
     
-    # 1. Get Sample Rate
     get_user_sample_rate()
 
-    # 2. Load & Process Data (Incremental)
     data_frames = []
     
     data_frames.append(load_local_snort())
@@ -244,7 +253,6 @@ if __name__ == "__main__":
     print(f"\n[+] Total Processed Records: {len(full_data)}")
     print(f"    Class Distribution: {full_data['label'].value_counts().to_dict()}")
 
-    # 2. Train Classifier
     print("\n[+] Training Random Forest Classifier...")
     
     text_features = 'message'
@@ -270,6 +278,7 @@ if __name__ == "__main__":
     classifier.fit(X_train, y_train)
     
     preds = classifier.predict(X_test)
+    
     unique_labels = sorted(list(set(y_test) | set(preds)))
     target_names = []
     if 0 in unique_labels: target_names.append('Benign')
@@ -279,7 +288,6 @@ if __name__ == "__main__":
     
     joblib.dump(classifier, 'random_forest_pipeline.joblib')
 
-    # 4. Train Anomaly Detector
     print("\n[+] Training Isolation Forest Anomaly Detector...")
     benign_data = full_data[full_data['label'] == 0]
     
