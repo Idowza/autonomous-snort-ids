@@ -2,6 +2,7 @@ import pandas as pd
 import os
 import glob
 import numpy as np
+import sys
 from sklearn.model_selection import train_test_split
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import StandardScaler
@@ -10,11 +11,32 @@ from sklearn.pipeline import Pipeline
 from sklearn.ensemble import RandomForestClassifier, IsolationForest
 from sklearn.metrics import classification_report
 import joblib
-import gc # Garbage collection
+import gc
 
 # --- Configuration ---
 DATASET_ROOT = os.path.abspath('datasets')
-SAMPLE_RATE = 0.1 # Keep only 10% of data from large files to save RAM
+
+# Default to 10% if not specified
+SAMPLE_RATE = 0.1 
+
+def get_user_sample_rate():
+    """ Asks the user for a sample rate. """
+    global SAMPLE_RATE
+    print(f"\n--- Configuration ---")
+    print(f"Current default sample rate is {SAMPLE_RATE * 100}%.")
+    try:
+        user_input = input("Enter desired sample rate (0.01 to 1.0) or press Enter to keep default: ").strip()
+        if user_input:
+            rate = float(user_input)
+            if 0.0 < rate <= 1.0:
+                SAMPLE_RATE = rate
+                print(f"-> Sample rate set to {SAMPLE_RATE * 100}%")
+            else:
+                print("Invalid input. Using default.")
+        else:
+            print("Using default sample rate.")
+    except ValueError:
+        print("Invalid input. Using default.")
 
 def engineer_features(df):
     """ Standardizes and engineers features. """
@@ -28,7 +50,7 @@ def engineer_features(df):
     df['dest_port'] = pd.to_numeric(df['dest_port'], errors='coerce').fillna(0).astype(int)
     return df[['message', 'dest_port', 'message_length', 'special_char_count', 'keyword_count', 'label']]
 
-# --- Memory Efficient Loaders ---
+# --- Loaders (Updated to use global SAMPLE_RATE) ---
 
 def load_and_process_cicids2017(folder_path):
     print(f"\n[+] Processing CIC-IDS-2017 from {folder_path}...")
@@ -36,10 +58,8 @@ def load_and_process_cicids2017(folder_path):
     dfs = []
     for f in files:
         try:
-            # Read only needed cols
             df = pd.read_csv(f, usecols=['Destination Port', 'Label'], encoding='latin1', low_memory=False)
             
-            # Downsample immediately
             if len(df) > 50000:
                 df = df.sample(frac=SAMPLE_RATE, random_state=42)
 
@@ -47,13 +67,11 @@ def load_and_process_cicids2017(folder_path):
             df['message'] = df['raw_label']
             df['label'] = df['raw_label'].apply(lambda x: 0 if str(x).strip() == 'BENIGN' else 1)
             
-            # Engineer features immediately to save space later
             df = engineer_features(df)
             dfs.append(df)
             print(f"    Processed {os.path.basename(f)} ({len(df)} rows)")
         except Exception: continue
-        finally: gc.collect() # Free memory
-        
+        finally: gc.collect()
     return pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
 
 def load_and_process_cicids2018(folder_path):
@@ -96,7 +114,6 @@ def load_and_process_unsw_nb15(folder_path):
 
     for f in files:
         try:
-            # Read everything but only keep needed columns
             df = pd.read_csv(f, header=None, names=unsw_columns, encoding='latin1', low_memory=False)
             
             if len(df) > 50000:
@@ -129,11 +146,12 @@ def load_local_snort():
 
 if __name__ == "__main__":
     
-    # 1. Load & Process Data (Incremental)
+    # 1. Get Sample Rate
+    get_user_sample_rate()
+
+    # 2. Load & Process Data (Incremental)
     data_frames = []
     
-    # Process each dataset and append the *result* to the list
-    # This keeps memory usage lower than loading all raw CSVs at once
     data_frames.append(load_local_snort())
     gc.collect()
     
@@ -155,7 +173,7 @@ if __name__ == "__main__":
     print(f"\n[+] Total Processed Records: {len(full_data)}")
     print(f"    Class Distribution: {full_data['label'].value_counts().to_dict()}")
 
-    # 2. Train Classifier
+    # 3. Train Classifier
     print("\n[+] Training Random Forest Classifier...")
     
     text_features = 'message'
@@ -173,7 +191,6 @@ if __name__ == "__main__":
     X = full_data[numeric_features + [text_features]]
     y = full_data['label']
     
-    # Handling single-class case for splitting
     try:
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y, random_state=42)
     except ValueError:
@@ -191,12 +208,12 @@ if __name__ == "__main__":
     
     joblib.dump(classifier, 'random_forest_pipeline.joblib')
 
-    # 3. Train Anomaly Detector
+    # 4. Train Anomaly Detector
     print("\n[+] Training Isolation Forest Anomaly Detector...")
     benign_data = full_data[full_data['label'] == 0]
     
     if not benign_data.empty:
-        # Use a manageable sample for Isolation Forest
+        # Use a manageable sample for Isolation Forest (e.g., 100k is usually enough to learn 'normal')
         if len(benign_data) > 100000:
             benign_sample = benign_data.sample(n=100000, random_state=42)
         else:
