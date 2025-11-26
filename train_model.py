@@ -3,6 +3,7 @@ import os
 import glob
 import numpy as np
 import sys
+import re
 from sklearn.model_selection import train_test_split
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import StandardScaler
@@ -14,6 +15,7 @@ import joblib
 import gc
 
 # --- Configuration ---
+# Use absolute path to be safe
 DATASET_ROOT = os.path.abspath('datasets')
 
 # Default to 10% if not specified
@@ -50,27 +52,51 @@ def engineer_features(df):
     df['dest_port'] = pd.to_numeric(df['dest_port'], errors='coerce').fillna(0).astype(int)
     return df[['message', 'dest_port', 'message_length', 'special_char_count', 'keyword_count', 'label']]
 
-# --- Loaders (Updated to use global SAMPLE_RATE) ---
+def find_column(df, candidates):
+    """ Helper to find a column name case-insensitively. """
+    cols = {c.lower().strip(): c for c in df.columns}
+    for cand in candidates:
+        if cand.lower() in cols:
+            return cols[cand.lower()]
+    return None
+
+# --- Loaders ---
 
 def load_and_process_cicids2017(folder_path):
     print(f"\n[+] Processing CIC-IDS-2017 from {folder_path}...")
     files = glob.glob(os.path.join(folder_path, '*.csv'))
     dfs = []
+    
+    if not files:
+        print(f"    [WARNING] No files found in {folder_path}")
+        return pd.DataFrame()
+
     for f in files:
         try:
-            df = pd.read_csv(f, usecols=['Destination Port', 'Label'], encoding='latin1', low_memory=False)
+            # Read headers first to check columns
+            header = pd.read_csv(f, nrows=0, encoding='latin1')
+            port_col = find_column(header, ['Destination Port', 'Dst Port'])
+            label_col = find_column(header, ['Label', 'Label '])
+
+            if not port_col or not label_col:
+                print(f"    [SKIP] {os.path.basename(f)} missing required columns. Found: {header.columns.tolist()}")
+                continue
+
+            df = pd.read_csv(f, usecols=[port_col, label_col], encoding='latin1', low_memory=False)
             
             if len(df) > 50000:
                 df = df.sample(frac=SAMPLE_RATE, random_state=42)
 
-            df.rename(columns={'Destination Port': 'dest_port', 'Label': 'raw_label'}, inplace=True)
+            df.rename(columns={port_col: 'dest_port', label_col: 'raw_label'}, inplace=True)
             df['message'] = df['raw_label']
             df['label'] = df['raw_label'].apply(lambda x: 0 if str(x).strip() == 'BENIGN' else 1)
             
             df = engineer_features(df)
             dfs.append(df)
             print(f"    Processed {os.path.basename(f)} ({len(df)} rows)")
-        except Exception: continue
+        except Exception as e: 
+            print(f"    [ERROR] processing {os.path.basename(f)}: {e}")
+            continue
         finally: gc.collect()
     return pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
 
@@ -78,21 +104,36 @@ def load_and_process_cicids2018(folder_path):
     print(f"\n[+] Processing CSE-CIC-IDS2018 from {folder_path}...")
     files = glob.glob(os.path.join(folder_path, '*.csv'))
     dfs = []
+    
+    if not files:
+        print(f"    [WARNING] No files found in {folder_path}")
+        return pd.DataFrame()
+
     for f in files:
         try:
-            df = pd.read_csv(f, usecols=['Dst Port', 'Label'], encoding='latin1', low_memory=False)
+            header = pd.read_csv(f, nrows=0, encoding='latin1')
+            port_col = find_column(header, ['Dst Port', 'Destination Port', 'dp'])
+            label_col = find_column(header, ['Label'])
+            
+            if not port_col or not label_col:
+                 print(f"    [SKIP] {os.path.basename(f)} missing required columns. Found: {header.columns.tolist()}")
+                 continue
+
+            df = pd.read_csv(f, usecols=[port_col, label_col], encoding='latin1', low_memory=False)
             
             if len(df) > 50000:
                 df = df.sample(frac=SAMPLE_RATE, random_state=42)
 
-            df.rename(columns={'Dst Port': 'dest_port', 'Label': 'raw_label'}, inplace=True)
+            df.rename(columns={port_col: 'dest_port', label_col: 'raw_label'}, inplace=True)
             df['message'] = df['raw_label']
             df['label'] = df['raw_label'].apply(lambda x: 0 if str(x).strip() == 'Benign' else 1)
             
             df = engineer_features(df)
             dfs.append(df)
             print(f"    Processed {os.path.basename(f)} ({len(df)} rows)")
-        except Exception: continue
+        except Exception as e:
+             print(f"    [ERROR] processing {os.path.basename(f)}: {e}")
+             continue
         finally: gc.collect()
     return pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
 
@@ -100,7 +141,12 @@ def load_and_process_unsw_nb15(folder_path):
     print(f"\n[+] Processing UNSW-NB15 from {folder_path}...")
     files = glob.glob(os.path.join(folder_path, '*.csv'))
     dfs = []
-    
+
+    if not files:
+        print(f"    [WARNING] No files found in {folder_path}")
+        return pd.DataFrame()
+
+    # Standard UNSW headers (if missing)
     unsw_columns = [
         'srcip', 'sport', 'dstip', 'dsport', 'proto', 'state', 'dur', 'sbytes', 'dbytes', 
         'sttl', 'dttl', 'sloss', 'dloss', 'service', 'Sload', 'Dload', 'Spkts', 'Dpkts', 
@@ -114,21 +160,45 @@ def load_and_process_unsw_nb15(folder_path):
 
     for f in files:
         try:
-            df = pd.read_csv(f, header=None, names=unsw_columns, encoding='latin1', low_memory=False)
+            # First, try to detect if headers exist by reading first line
+            peek = pd.read_csv(f, nrows=5, encoding='latin1')
             
+            # Check if 'dsport' or 'dst_port' is in the columns inferred by pandas
+            if 'dsport' in peek.columns or 'dst_port' in peek.columns:
+                 # Headers EXIST
+                 print(f"    [INFO] {os.path.basename(f)} appears to have headers.")
+                 df = pd.read_csv(f, encoding='latin1', low_memory=False)
+            else:
+                 # Headers MISSING (Raw files)
+                 print(f"    [INFO] {os.path.basename(f)} appears to be raw (no headers). Applying standard UNSW headers.")
+                 df = pd.read_csv(f, header=None, names=unsw_columns, encoding='latin1', low_memory=False)
+
             if len(df) > 50000:
                 df = df.sample(frac=SAMPLE_RATE, random_state=42)
-                
-            df = df[['dsport', 'attack_cat', 'Label']].copy()
-            df.rename(columns={'dsport': 'dest_port'}, inplace=True)
-            df['message'] = df['attack_cat'].fillna('Benign Traffic')
-            df['label'] = df['Label']
+
+            # Normalize
+            if 'dsport' in df.columns: df.rename(columns={'dsport': 'dest_port'}, inplace=True)
+            elif 'dst_port' in df.columns: df.rename(columns={'dst_port': 'dest_port'}, inplace=True)
+            else:
+                 print(f"    [SKIP] {os.path.basename(f)} missing port column. Found: {df.columns.tolist()}")
+                 continue
+
+            if 'attack_cat' in df.columns:
+                df['message'] = df['attack_cat'].fillna('Benign Traffic')
+            else:
+                df['message'] = 'Unknown Activity'
+
+            if 'Label' in df.columns:
+                df['label'] = df['Label']
+            else:
+                # Fallback if Label column missing
+                df['label'] = df['message'].apply(lambda x: 0 if 'benign' in str(x).lower() else 1)
             
             df = engineer_features(df)
             dfs.append(df)
             print(f"    Processed {os.path.basename(f)} ({len(df)} rows)")
         except Exception as e: 
-            print(f"    Skipping {os.path.basename(f)}: {e}")
+            print(f"    [ERROR] processing {os.path.basename(f)}: {e}")
             continue
         finally: gc.collect()
     return pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
@@ -140,6 +210,7 @@ def load_local_snort():
         df['label'] = 1 
         return engineer_features(df)
     except FileNotFoundError:
+        print("    [WARNING] snort_alerts.csv not found.")
         return pd.DataFrame()
 
 # --- Main Execution ---
@@ -173,7 +244,7 @@ if __name__ == "__main__":
     print(f"\n[+] Total Processed Records: {len(full_data)}")
     print(f"    Class Distribution: {full_data['label'].value_counts().to_dict()}")
 
-    # 3. Train Classifier
+    # 2. Train Classifier
     print("\n[+] Training Random Forest Classifier...")
     
     text_features = 'message'
@@ -213,7 +284,6 @@ if __name__ == "__main__":
     benign_data = full_data[full_data['label'] == 0]
     
     if not benign_data.empty:
-        # Use a manageable sample for Isolation Forest (e.g., 100k is usually enough to learn 'normal')
         if len(benign_data) > 100000:
             benign_sample = benign_data.sample(n=100000, random_state=42)
         else:
