@@ -1,5 +1,4 @@
 import pandas as pd
-import re
 import os
 import glob
 import numpy as np
@@ -13,128 +12,103 @@ from sklearn.metrics import classification_report
 import joblib
 
 # --- Configuration ---
-DATASET_ROOT = 'datasets' # Folder containing subfolders for each dataset
-
-# --- Helper Functions for Feature Engineering ---
+DATASET_ROOT = 'datasets'
 
 def engineer_features(df):
     """ Standardizes and engineers features for all datasets. """
-    # Ensure we are working with strings
+    # Ensure message is string and handle missing values
     df['message'] = df['message'].astype(str).fillna('Unknown')
     
-    # Engineer Features
+    # 1. Message Length
     df['message_length'] = df['message'].str.len()
+    
+    # 2. Special Character Count
     special_chars = r'[\$\{\}\(\)\'\/]'
     df['special_char_count'] = df['message'].str.count(special_chars)
     
-    keywords = ['select', 'union', 'script', 'jndi', 'ldap', 'payload', 'attack', 'exploit']
+    # 3. Keyword Count
+    keywords = ['select', 'union', 'script', 'jndi', 'ldap', 'payload', 'attack', 'exploit', 'scan']
     keyword_pattern = '|'.join(keywords)
     df['keyword_count'] = df['message'].str.lower().str.count(keyword_pattern)
     
-    # Ensure Port is Integer
+    # 4. Clean Port: Force to numeric, turn errors (like '0x20') into 0
     df['dest_port'] = pd.to_numeric(df['dest_port'], errors='coerce').fillna(0).astype(int)
     
     return df[['message', 'dest_port', 'message_length', 'special_char_count', 'keyword_count', 'label']]
 
-# --- Dataset Specific Loaders ---
+# --- Custom Loaders for Each Dataset Type ---
 
 def load_cicids2017(folder_path):
     print(f"\n[+] Loading CIC-IDS-2017 from {folder_path}...")
     files = glob.glob(os.path.join(folder_path, '*.csv'))
     dfs = []
-    
-    # Standardizing Attack Labels to generic categories
-    attack_map = {
-        'BENIGN': 'Benign Traffic',
-        'Bot': 'Botnet Activity',
-        'DDoS': 'Denial of Service Attack',
-        'DoS Hulk': 'Denial of Service Attack',
-        'DoS GoldenEye': 'Denial of Service Attack',
-        'DoS slowloris': 'Denial of Service Attack',
-        'DoS Slowhttptest': 'Denial of Service Attack',
-        'FTP-Patator': 'Brute Force FTP',
-        'SSH-Patator': 'Brute Force SSH',
-        'PortScan': 'Port Scan',
-        'Heartbleed': 'Heartbleed Vulnerability',
-        'Infiltration': 'Infiltration Attack',
-        'Web Attack': 'Web Application Attack'
-    }
-
     for f in files:
         try:
-            # Read only necessary columns to save memory
+            # 2017 uses "Destination Port" and "Label"
             df = pd.read_csv(f, usecols=['Destination Port', 'Label'], encoding='latin1', low_memory=False)
             df.rename(columns={'Destination Port': 'dest_port', 'Label': 'raw_label'}, inplace=True)
             
-            # Map Labels
-            df['message'] = df['raw_label'].map(attack_map).fillna('Generic Malicious Activity')
+            # Use the raw label (e.g., "DoS Hulk") as the alert message
+            df['message'] = df['raw_label']
             df['label'] = df['raw_label'].apply(lambda x: 0 if x == 'BENIGN' else 1)
-            
             dfs.append(df)
-        except ValueError: continue # Skip files without the right columns
-            
+        except Exception: continue
     return pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
 
 def load_cicids2018(folder_path):
     print(f"\n[+] Loading CSE-CIC-IDS2018 from {folder_path}...")
     files = glob.glob(os.path.join(folder_path, '*.csv'))
     dfs = []
-    
     for f in files:
         try:
-            # 2018 often uses 'Dst Port' instead of 'Destination Port'
+            # 2018 uses "Dst Port" and "Label"
             df = pd.read_csv(f, usecols=['Dst Port', 'Label'], encoding='latin1', low_memory=False)
             df.rename(columns={'Dst Port': 'dest_port', 'Label': 'raw_label'}, inplace=True)
             
-            # 2018 labels are similar to 2017, reusing simple logic
-            df['message'] = df['raw_label'].astype(str) # Use raw label as message for variety
+            df['message'] = df['raw_label']
             df['label'] = df['raw_label'].apply(lambda x: 0 if x == 'Benign' else 1)
-            
             dfs.append(df)
-        except ValueError: continue
-            
+        except Exception: continue
     return pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
 
 def load_unsw_nb15(folder_path):
     print(f"\n[+] Loading UNSW-NB15 from {folder_path}...")
     files = glob.glob(os.path.join(folder_path, '*.csv'))
     dfs = []
-    
     for f in files:
         try:
-            # UNSW usually uses 'dsport' and 'attack_cat' or 'Label'
-            # We try to read typical UNSW columns
+            # UNSW uses "dsport" and "attack_cat"
+            # We load 'Label' (0/1) as well to be safe
             df = pd.read_csv(f, encoding='latin1', low_memory=False)
             
-            # Normalize Columns
+            # Normalize Port Column
             if 'dsport' in df.columns:
                 df.rename(columns={'dsport': 'dest_port'}, inplace=True)
-            elif 'dst_port' in df.columns: # Sometimes named differently
+            elif 'dst_port' in df.columns:
                 df.rename(columns={'dst_port': 'dest_port'}, inplace=True)
             else:
-                continue # Skip if no port info
+                continue
 
-            # Handle Labels
+            # Normalize Message/Label
             if 'attack_cat' in df.columns:
-                df['message'] = df['attack_cat'].fillna('Benign')
-                df['label'] = df['message'].apply(lambda x: 0 if x.strip().lower() in ['benign', 'normal'] else 1)
-            elif 'Label' in df.columns:
-                df['label'] = df['Label']
-                df['message'] = df['Label'].apply(lambda x: 'Benign Traffic' if x==0 else 'Malicious Activity')
+                df['message'] = df['attack_cat'].fillna('Benign Traffic')
+                # UNSW has a 'Label' column where 0 is normal, 1 is attack
+                if 'Label' in df.columns:
+                    df['label'] = df['Label']
+                else:
+                    df['label'] = df['message'].apply(lambda x: 0 if 'benign' in str(x).lower() else 1)
             
             dfs.append(df[['dest_port', 'message', 'label']])
         except Exception as e: 
-            print(f"Skipping {f}: {e}")
+            print(f"    Skipping {os.path.basename(f)}: {e}")
             continue
-            
     return pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
 
 def load_local_snort():
     print("\n[+] Loading Local Snort Logs...")
     try:
         df = pd.read_csv('snort_alerts.csv')
-        # Local logs have 'message' and 'dest_port' already
-        df['label'] = 1 # Assume all snort alerts are malicious/suspicious
+        df['label'] = 1 # Assume local alerts are malicious
         return df[['message', 'dest_port', 'label']]
     except FileNotFoundError:
         return pd.DataFrame()
@@ -143,9 +117,8 @@ def load_local_snort():
 
 if __name__ == "__main__":
     
-    # 1. Aggregate Data
+    # 1. Load All Data
     data_frames = []
-    
     data_frames.append(load_local_snort())
     data_frames.append(load_cicids2017(os.path.join(DATASET_ROOT, 'cicids2017')))
     data_frames.append(load_cicids2018(os.path.join(DATASET_ROOT, 'cicids2018')))
@@ -154,71 +127,86 @@ if __name__ == "__main__":
     full_data = pd.concat(data_frames, ignore_index=True)
     
     if full_data.empty:
-        print("Error: No data loaded. Check your folder structure.")
+        print("\n[ERROR] No data loaded. Please check that your CSV files are in the 'datasets' subfolders.")
         exit()
 
-    print(f"\n[+] Total Raw Records: {len(full_data)}")
+    print(f"\n[+] Total Records Loaded: {len(full_data)}")
 
-    # 2. Feature Engineering
+    # Check Class Distribution
+    print(f"    Class Distribution: {full_data['label'].value_counts().to_dict()}")
+
+    # 2. Engineer Features
     print("[-] Engineering features...")
     full_data = engineer_features(full_data)
     
-    # 3. Train Classifier (Random Forest)
-    print("\n[+] Training Classifier (Random Forest)...")
+    # 3. Downsample if necessary (To prevent RAM crash)
+    # If you have > 2 million rows, we sample to keep it manageable
+    if len(full_data) > 2000000:
+        print(f"    Dataset is large ({len(full_data)}). Sampling 2M records for training...")
+        train_df = full_data.sample(n=2000000, random_state=42)
+    else:
+        train_df = full_data
+
+    # 4. Train Classifier
+    print("\n[+] Training Random Forest Classifier...")
     
-    # Preprocessor setup
     text_features = 'message'
     numeric_features = ['dest_port', 'message_length', 'special_char_count', 'keyword_count']
     
     preprocessor = ColumnTransformer(
         transformers=[
             ('num', StandardScaler(), numeric_features),
-            ('text', TfidfVectorizer(max_features=1000), text_features) # Limit features to save RAM
+            ('text', TfidfVectorizer(max_features=5000), text_features)
         ], remainder='passthrough')
     
-    classifier_pipeline = Pipeline(steps=[('preprocessor', preprocessor),
-                                          ('classifier', RandomForestClassifier(n_jobs=-1, random_state=42))])
+    classifier = Pipeline(steps=[('preprocessor', preprocessor),
+                                 ('clf', RandomForestClassifier(n_jobs=-1, random_state=42))])
     
-    # Sample if data is too huge (optional, prevents crashing on limited RAM)
-    if len(full_data) > 1000000:
-        print("    (Downsampling training data to 1M records for performance)")
-        train_sample = full_data.sample(n=1000000, random_state=42)
-    else:
-        train_sample = full_data
+    X = train_df[numeric_features + [text_features]]
+    y = train_df['label']
+    
+    # Use stratify to ensure both classes are in test set if possible
+    try:
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y, random_state=42)
+    except ValueError:
+        print("    Warning: Cannot stratify (one class is too small). Using random split.")
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-    X = train_sample[numeric_features + [text_features]]
-    y = train_sample['label']
+    classifier.fit(X_train, y_train)
     
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y)
+    print("    Classifier Evaluation:")
+    preds = classifier.predict(X_test)
     
-    classifier_pipeline.fit(X_train, y_train)
-    
-    print("    Evaluating Classifier...")
-    preds = classifier_pipeline.predict(X_test)
-    print(classification_report(y_test, preds, target_names=['Benign', 'Malicious']))
-    
-    joblib.dump(classifier_pipeline, 'random_forest_pipeline.joblib')
-    print("    Classifier saved.")
+    # Dynamic Target Names Fix
+    unique_labels = sorted(list(set(y_test) | set(preds)))
+    target_names = []
+    if 0 in unique_labels: target_names.append('Benign')
+    if 1 in unique_labels: target_names.append('Malicious')
 
-    # 4. Train Anomaly Detector (Isolation Forest)
-    print("\n[+] Training Anomaly Detector (Isolation Forest)...")
+    print(classification_report(y_test, preds, target_names=target_names))
     
-    # Train ONLY on benign data
-    benign_data = full_data[full_data['label'] == 0]
+    joblib.dump(classifier, 'random_forest_pipeline.joblib')
+
+    # 5. Train Anomaly Detector (Benign Data Only)
+    print("\n[+] Training Isolation Forest Anomaly Detector...")
+    benign_data = train_df[train_df['label'] == 0]
     
-    if len(benign_data) > 500000:
-        benign_sample = benign_data.sample(n=500000, random_state=42)
-    else:
-        benign_sample = benign_data
+    if not benign_data.empty:
+        # Isolate forest doesn't need millions of rows to learn "normal"
+        if len(benign_data) > 500000:
+            benign_sample = benign_data.sample(n=500000, random_state=42)
+        else:
+            benign_sample = benign_data
+            
+        X_benign = benign_sample[numeric_features + [text_features]]
         
-    X_benign = benign_sample[numeric_features + [text_features]]
+        anomaly_detector = Pipeline(steps=[('preprocessor', preprocessor),
+                                           ('clf', IsolationForest(n_jobs=-1, random_state=42, contamination='auto'))])
+        
+        anomaly_detector.fit(X_benign)
+        joblib.dump(anomaly_detector, 'isolation_forest_pipeline.joblib')
+        print("    Anomaly Detector saved.")
+    else:
+        print("    [WARNING] No benign data found. Skipping Anomaly Detector training.")
     
-    anomaly_pipeline = Pipeline(steps=[('preprocessor', preprocessor),
-                                       ('detector', IsolationForest(n_jobs=-1, random_state=42, contamination='auto'))])
-    
-    anomaly_pipeline.fit(X_benign)
-    
-    joblib.dump(anomaly_pipeline, 'isolation_forest_pipeline.joblib')
-    print("    Anomaly Detector saved.")
-    
-    print("\n[SUCCESS] All models trained and updated.")
+    print("\n[SUCCESS] All models trained and saved.")
