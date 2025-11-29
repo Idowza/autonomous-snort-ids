@@ -55,7 +55,12 @@ Three custom Snort 3 rules were developed and validated as part of Phase 1:
     sudo snort -c /etc/snort/snort.lua -R /etc/snort/rules/local.rules -i eth0 -k none -l /var/log/snort
     ```
 
-2.  **Generate Test Traffic:** From the Attacker machine, trigger the existing rules.
+2.  **Monitor Live Logs:** On the Mint machine, view the live logs to confirm alerts are being received.
+    ```bash
+    sudo tail -f /var/log/snort_alerts.log
+    ```
+
+3.  **Generate Test Traffic:** From the Attacker machine, trigger the existing rules.
     ```bash
     # Ping Sweep, Nmap, and SSH Brute Force tests
     for i in {1..15}; do ping -c 1 192.168.1.44; done
@@ -63,7 +68,7 @@ Three custom Snort 3 rules were developed and validated as part of Phase 1:
     hydra -l root -P /usr/share/wordlists/rockyou.txt -t 5 ssh://192.168.1.44
     ```
 
-3.  **Run the AI Pipeline:** On the Snort machine, execute the Python scripts in order.
+4.  **Run the AI Pipeline:** On the Snort machine, execute the Python scripts in order.
     ```bash
     # 1. Parse Snort logs into a structured CSV file
     python3 parse_logs.py
