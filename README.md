@@ -15,6 +15,18 @@ This repository contains the code for an AI-enhanced Intrusion Detection System 
 *   **LLM Integration:** Ollama with Llama 3
 *   **Operating Systems:** Kali Linux (IDS) and Linux Mint (Attacker/AI Host)
 
+## Log Forwarding Architecture
+
+The log transfer from the Kali machine (Snort IDS) to the Linux Mint machine (AI/Attacker) happens through the Syslog protocol over the network.
+
+1.  **Generation:** Snort on Kali detects an attack and generates an alert.
+2.  **Internal Handoff:** Because `alert_syslog` is configured in `snort.lua`, Snort hands this alert message to the local logging service on Kali (Rsyslog), tagging it with the "facility" `local5`.
+3.  **Network Transmission:** The Rsyslog service on Kali reads its config file (`/etc/rsyslog.d/60-snort.conf`). It sees the rule `local5.* @192.168.1.6:514`. This tells it to wrap the message in a UDP packet and send it to IP `192.168.1.6` on port 514.
+4.  **Reception:** The Rsyslog service on the Mint machine is listening on UDP port 514 and receives the packet.
+5.  **Filtering & Writing:** Rsyslog on Mint reads its config (`/etc/rsyslog.d/40-snort.conf`). It sees the rule `if $syslogfacility-text == 'local5' then /var/log/snort_alerts.log`. It recognizes the `local5` tag and writes the message into that specific text file.
+
+This effectively creates a dedicated, invisible pipeline sending text messages from one operating system's log manager to another's.
+
 ## Getting Started
 
 ### Prerequisites
@@ -36,6 +48,21 @@ The lab consists of two bare metal machines on an isolated network:
 ### Snort Configuration
 
 Snort 3 is configured via `/etc/snort/snort.lua`. Ensure `HOME_NET` is set to your lab network and that your custom rules file (`/etc/snort/rules/local.rules`) is included in the `ips` section.
+
+To enable log forwarding to Rsyslog, add the following configuration to `snort.lua`:
+
+```lua
+-- Configure syslog to send alerts using a specific 'facility'
+alert_syslog = {
+    facility = 'local5',
+    level = 'alert',
+}
+
+-- Activate ONLY the syslog logger
+loggers = {
+    'alert_syslog',
+}
+```
 
 ### Custom Snort Rules
 
