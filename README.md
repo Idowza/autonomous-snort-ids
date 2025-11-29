@@ -95,7 +95,7 @@ Three custom Snort 3 rules were developed and validated as part of Phase 1:
     hydra -l root -P /usr/share/wordlists/rockyou.txt -t 5 ssh://192.168.1.44
     ```
 
-4.  **Run the AI Pipeline:** On the Snort machine, execute the Python scripts in order.
+4.  **Run the AI Pipeline (Manual Method):** On the Snort machine, execute the Python scripts individually in order.
     ```bash
     # 1. Parse Snort logs into a structured CSV file
     python3 parse_logs.py
@@ -110,6 +110,12 @@ Three custom Snort 3 rules were developed and validated as part of Phase 1:
     python3 approve_rules.py
     ```
     This will parse logs, train a hybrid model (Classifier + Anomaly Detector), detect threats, generate a new Snort rule using Llama 3, and allow for human-in-the-loop approval and deployment.
+
+5.  **Run the AI Pipeline (Interactive Method):** Alternatively, use the master script to run the entire pipeline interactively.
+    ```bash
+    python3 run_pipeline.py
+    ```
+    This script combines parsing, training, rule suggestion, and approval into a single interactive session.
 
 ## Project Status
 
