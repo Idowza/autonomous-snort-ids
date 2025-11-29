@@ -93,10 +93,10 @@ Three custom Snort 3 rules were developed and validated as part of Phase 1:
     - [x] Successfully detected novel Log4j attack (missed by classifier, caught by anomaly detector).
     - [x] Integrated Ollama for autonomous rule generation.
     - [x] Created `approve_rules.py` for human-in-the-loop feedback and dynamic deployment.
+    - [x] **Expand Model Knowledge:** Updated `train_model.py` to ingest UNSW-NB15, CICIoV2024, CICEV2023, and CSE-CIC-IDS2018 datasets.
+    - [x] **Full "Lights-Out" Automation:** Created a master script (`run_pipeline.py`) to orchestrate the entire lifecycle.
 - [ ] **Next Steps (Final Report):**
-    1. **Expand Model Knowledge:** Update `train_model.py` to ingest UNSW-NB15, CICIoV2024, CICEV2023, and CSE-CIC-IDS2018 datasets.
-    2. **Full "Lights-Out" Automation:** Create a master script (`run_pipeline.py`) to orchestrate the entire lifecycle.
-    3. **Automated Rule Validation:** Develop a script to re-launch attacks and verify that newly deployed rules successfully detect them.
+    1. **Automated Rule Validation:** Develop a script to re-launch attacks and verify that newly deployed rules successfully detect them.
 
 ## Future Work
 
