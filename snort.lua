@@ -187,6 +187,11 @@ ips =
 
     rules = [[
     include /etc/snort/rules/local.rules
+    include /etc/snort/rules/snort3-community.rules
+    include /etc/snort/rules/ddos.rules
+    include /etc/snort/rules/experimental.rules
+    include /etc/snort/rules/x11.rules
+    include /etc/snort/rules/includes.rules
     ]],
 
     -- use include for rules files; be sure to set your path
