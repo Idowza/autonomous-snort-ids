@@ -100,7 +100,7 @@ if __name__ == "__main__":
         
         try:
             response = ollama.chat(
-                model='llama3', # Or llama3.1 if you pulled it
+                model='llama3.1:8b', # Or llama3.1 if you pulled it
                 messages=[{'role': 'user', 'content': prompt}],
                 stream=False
             )
