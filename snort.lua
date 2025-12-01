@@ -215,19 +215,27 @@ ips =
 -- below are examples of filters
 -- each table is a list of records
 
---[[
 suppress =
 {
     -- don't want to any of see these
-    { gid = 1, sid = 1 },
+    -- { gid = 1, sid = 1 },
 
     -- don't want to see anything for a given host
-    { track = 'by_dst', ip = '1.2.3.4' }
+    -- { track = 'by_dst', ip = '1.2.3.4' }
 
     -- don't want to see these for a given host
-    { gid = 1, sid = 2, track = 'by_dst', ip = '1.2.3.4' },
+    -- { gid = 1, sid = 2, track = 'by_dst', ip = '1.2.3.4' },
+    -- Supress Broadcast Packets
+    { gid = 116, sid = 414 },
+    -- Suppress ARP Spoof alerts
+    { gid = 112, sid = 4 },
+    { gid = 112, sid = 1 },
+    -- Suppress "IPv4 datagram length > captured length" noise
+    { gid = 116, sid = 432 },
+    -- mDNS/Bonjour "Portsweep" noise (New)
+    { gid = 122, sid = 23 }
+    
 }
---]]
 
 --[[
 event_filter =

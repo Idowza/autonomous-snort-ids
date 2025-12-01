@@ -37,3 +37,10 @@ ollama run llama3
 sudo tail -f /var/log/snort_alerts.log
 ```
 http://cicresearch.ca/CICDataset/CIC-IDS-2017/Dataset/
+
+# Log File Permissions
+```bash
+sudo chown syslog:adm /var/log/snort_alerts.log
+sudo chmod 640 /var/log/snort_alerts.log
+sudo systemctl restart rsyslog
+```
