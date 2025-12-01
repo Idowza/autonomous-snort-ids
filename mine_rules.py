@@ -7,7 +7,7 @@ import os
 # --- Configuration ---
 INPUT_CSV = 'snort_alerts.csv'
 OUTPUT_RULES_FILE = 'mined_rules.rules'
-MODEL_NAME = 'llama3' # Use 'llama3.1' if available for better results
+MODEL_NAME = 'llama3.1:8b' # Use 'llama3.1' if available for better results
 
 def generate_snort_rule_prompt(alert_info):
     """
