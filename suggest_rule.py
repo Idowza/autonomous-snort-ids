@@ -2,14 +2,19 @@ import joblib
 import ollama
 import pandas as pd
 import re
-import time
+import sys
+import os
+
+# --- Configuration ---
+MODEL_NAME = 'llama3' # Change to 'llama3.1' if available
+ALERTS_FILE = 'snort_alerts.csv'
 
 def engineer_features_for_single_alert(alert_info):
     """
     Performs the same feature engineering on a single new alert
     that was done on the training data.
     """
-    message = alert_info['message']
+    message = str(alert_info['message'])
     
     df = pd.DataFrame([{
         'message': message,
@@ -19,24 +24,25 @@ def engineer_features_for_single_alert(alert_info):
     df['message_length'] = df['message'].str.len()
     special_chars = r'[\$\{\}\(\)\'\/]'
     df['special_char_count'] = df['message'].str.count(special_chars)
-    keywords = ['select', 'union', 'script', 'jndi', 'ldap', 'payload']
+    keywords = ['select', 'union', 'script', 'jndi', 'ldap', 'payload', 'attack', 'exploit', 'scan']
     keyword_pattern = '|'.join(keywords)
     df['keyword_count'] = df['message'].str.lower().str.count(keyword_pattern)
     
     return df[['dest_port', 'message_length', 'special_char_count', 'keyword_count', 'message']]
 
-
 def generate_snort_rule_prompt(alert_info):
     """
     Constructs a highly specific prompt for Ollama to generate a production-ready Snort rule.
     """
-    src_ip = alert_info['source_ip']
+    src_ip = alert_info.get('source_ip', '$EXTERNAL_NET')
     dst_port = alert_info['dest_port']
+    message = alert_info['message']
+    
     # Simple logic to extract a likely payload substring for the prompt example
-    payload_hint = alert_info['message']
-    if "payload=" in payload_hint:
+    payload_hint = "unknown"
+    if "payload=" in str(message):
         try:
-            payload_hint = payload_hint.split("payload=")[1].split(" ")[0]
+            payload_hint = str(message).split("payload=")[1].split(" ")[0]
         except: pass
 
     prompt = f"""
@@ -45,7 +51,8 @@ def generate_snort_rule_prompt(alert_info):
     THREAT DETAILS:
     - Source IP: {src_ip}
     - Destination Port: {dst_port}
-    - Full Alert Text: "{alert_info['message']}"
+    - Full Alert Text: "{message}"
+    - Suspected Payload: "{payload_hint}"
 
     STRICT REQUIREMENTS:
     1. HEADER: Use 'alert tcp any any -> $HOME_NET {dst_port}'. Do NOT hardcode the destination IP.
@@ -64,6 +71,25 @@ def generate_snort_rule_prompt(alert_info):
     """
     return prompt
 
+def get_latest_alert():
+    """Reads the most recent alert from the CSV file."""
+    if not os.path.exists(ALERTS_FILE):
+        print(f"Error: {ALERTS_FILE} not found. Run parse_logs.py first.")
+        sys.exit(1)
+        
+    try:
+        # Read only the last few lines to be efficient, or read whole if small
+        df = pd.read_csv(ALERTS_FILE)
+        if df.empty:
+            print("Alerts file is empty.")
+            sys.exit(0)
+            
+        last_row = df.iloc[-1]
+        return last_row
+    except Exception as e:
+        print(f"Error reading alerts file: {e}")
+        sys.exit(1)
+
 # --- Main Execution ---
 if __name__ == "__main__":
     # 1. Load models
@@ -72,15 +98,20 @@ if __name__ == "__main__":
         anomaly_pipeline = joblib.load('isolation_forest_pipeline.joblib')
     except FileNotFoundError as e:
         print(f"Error: Could not find model file: {e.filename}")
-        exit()
+        print("Please run 'train_model.py' first.")
+        sys.exit(1)
 
-    # 2. Simulate Alert (Log4j)
+    # 2. Get Real Live Alert
+    alert_data = get_latest_alert()
+    
     new_alert_info = {
-        'message': 'GET /?payload=${jndi:ldap://192.168.1.6:1389/a} HTTP/1.1',
-        'source_ip': '192.168.1.6',
-        'dest_port': '8080',
-        'protocol': 'tcp'
+        'message': alert_data['message'],
+        'source_ip': alert_data.get('source_ip', '$EXTERNAL_NET'),
+        'dest_port': alert_data['dest_port'],
+        'protocol': 'tcp' 
     }
+
+    print(f"Analyzing latest alert: {new_alert_info['message']}")
 
     # 3. Predict
     new_alert_df = engineer_features_for_single_alert(new_alert_info)
@@ -92,15 +123,16 @@ if __name__ == "__main__":
     print(f"Anomaly Prediction:    {'ANOMALY' if anomaly_prediction[0] == -1 else 'Normal'}")
     print("-----------------------------")
 
+    # Logic: Flag if EITHER model says it's bad
     if classifier_prediction[0] == 1 or anomaly_prediction[0] == -1:
-        print("\n[SUCCESS] Threat detected.")
+        print("\n[SUCCESS] Threat detected by hybrid system.")
         print("Requesting optimized rule from Ollama...")
         
         prompt = generate_snort_rule_prompt(new_alert_info)
         
         try:
             response = ollama.chat(
-                model='llama3.1:8b', # Or llama3.1 if you pulled it
+                model=MODEL_NAME,
                 messages=[{'role': 'user', 'content': prompt}],
                 stream=False
             )
@@ -109,6 +141,8 @@ if __name__ == "__main__":
             
             # --- Post-Processing / Cleaning ---
             rule = rule.replace('```', '').replace('snort', '').strip()
+            rule = re.sub(r'src ip \S+', '', rule, flags=re.IGNORECASE)
+            rule = re.sub(r'dst port \S+', '', rule, flags=re.IGNORECASE)
             rule = re.sub(' +', ' ', rule) # Remove double spaces
             
             print("\n--- Suggested Rule ---")
@@ -117,7 +151,7 @@ if __name__ == "__main__":
 
             # Save with overwrite to keep file clean for demo
             with open("suggested_rules.txt", "w") as f: 
-                f.write(f"# Rule for Log4j Alert\n")
+                f.write(f"# Rule for Alert: {new_alert_info['message']}\n")
                 f.write(rule + "\n")
             print("Rule saved to suggested_rules.txt")
 
