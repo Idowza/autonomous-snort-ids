@@ -2,6 +2,7 @@ import joblib
 import ollama
 import pandas as pd
 import re
+import time
 
 def engineer_features_for_single_alert(alert_info):
     """
@@ -27,34 +28,39 @@ def engineer_features_for_single_alert(alert_info):
 
 def generate_snort_rule_prompt(alert_info):
     """
-    Constructs a stricter prompt for Ollama to generate a Snort rule.
-    Includes explicit DO and DO NOT examples.
+    Constructs a highly specific prompt for Ollama to generate a production-ready Snort rule.
     """
     src_ip = alert_info['source_ip']
     dst_port = alert_info['dest_port']
-    
+    # Simple logic to extract a likely payload substring for the prompt example
+    payload_hint = alert_info['message']
+    if "payload=" in payload_hint:
+        try:
+            payload_hint = payload_hint.split("payload=")[1].split(" ")[0]
+        except: pass
+
     prompt = f"""
-    You are a Snort 3 expert. Write a strict Snort 3 rule to block the following threat.
+    You are a Snort 3 expert. Write a strict, production-ready Snort 3 rule to block the following threat.
     
     THREAT DETAILS:
     - Source IP: {src_ip}
     - Destination Port: {dst_port}
-    - Payload: "{alert_info['message']}"
+    - Full Alert Text: "{alert_info['message']}"
 
-    STRICT FORMATTING RULES:
-    1. Use the standard header format: alert tcp <SRC_IP> any -> any <DST_PORT>
-    2. Do NOT use words like "src ip" or "dst port" in the header.
-    3. Do NOT include markdown code fences (```).
-    4. Ensure the rule options are enclosed in parentheses.
+    STRICT REQUIREMENTS:
+    1. HEADER: Use 'alert tcp any any -> $HOME_NET {dst_port}'. Do NOT hardcode the destination IP.
+    2. CONTENT: Match ONLY the specific malicious part of the payload (e.g., '{payload_hint}'), not the entire request.
+    3. METADATA:
+       - flow:to_server, established
+       - classtype:attempted-admin
+       - sid:1000005 (or higher)
+       - rev:1
+    4. FORMAT: Output ONLY the raw rule line. No markdown, no explanations.
 
-    CORRECT EXAMPLE (Follow this structure):
-    alert tcp {src_ip} any -> any {dst_port} (msg:"Detected Malicious Payload"; content:"payload"; sid:1000020; rev:1;)
-
-    INCORRECT EXAMPLE (Never do this):
-    alert tcp src ip {src_ip} dst port {dst_port} ...
+    CORRECT EXAMPLE:
+    alert tcp any any -> $HOME_NET 80 (msg:"MALWARE-OTHER Log4j JNDI injection attempt"; flow:to_server,established; content:"${{jndi:ldap://"; fast_pattern; classtype:attempted-admin; sid:1000005; rev:1;)
 
     OUTPUT:
-    Provide ONLY the valid Snort rule line. Nothing else.
     """
     return prompt
 
@@ -68,7 +74,7 @@ if __name__ == "__main__":
         print(f"Error: Could not find model file: {e.filename}")
         exit()
 
-    # 2. Simulate Alert
+    # 2. Simulate Alert (Log4j)
     new_alert_info = {
         'message': 'GET /?payload=${jndi:ldap://192.168.1.6:1389/a} HTTP/1.1',
         'source_ip': '192.168.1.6',
@@ -87,14 +93,14 @@ if __name__ == "__main__":
     print("-----------------------------")
 
     if classifier_prediction[0] == 1 or anomaly_prediction[0] == -1:
-        print("\nSUCCESS: Threat detected.")
-        print("Asking Ollama to generate a valid Snort rule...")
+        print("\n[SUCCESS] Threat detected.")
+        print("Requesting optimized rule from Ollama...")
         
         prompt = generate_snort_rule_prompt(new_alert_info)
         
         try:
             response = ollama.chat(
-                model='llama3',
+                model='llama3', # Or llama3.1 if you pulled it
                 messages=[{'role': 'user', 'content': prompt}],
                 stream=False
             )
@@ -103,17 +109,15 @@ if __name__ == "__main__":
             
             # --- Post-Processing / Cleaning ---
             rule = rule.replace('```', '').replace('snort', '').strip()
-            # Remove common LLM hallucinations if they appear
-            rule = rule.replace('src ip', '').replace('dst port', '') 
-            # Fix double spaces caused by removal
-            rule = re.sub(' +', ' ', rule)
+            rule = re.sub(' +', ' ', rule) # Remove double spaces
             
             print("\n--- Suggested Rule ---")
             print(rule)
             print("----------------------")
 
-            with open("suggested_rules.txt", "w") as f: # Overwrite to keep it clean for the demo
-                f.write(f"# Rule for Log4j\n")
+            # Save with overwrite to keep file clean for demo
+            with open("suggested_rules.txt", "w") as f: 
+                f.write(f"# Rule for Log4j Alert\n")
                 f.write(rule + "\n")
             print("Rule saved to suggested_rules.txt")
 
