@@ -6,7 +6,7 @@ import sys
 import os
 
 # --- Configuration ---
-MODEL_NAME = 'llama3' 
+MODEL_NAME = 'llama3.1:8b' 
 ALERTS_FILE = 'snort_alerts.csv'
 CURSOR_FILE = 'alert_cursor.txt'
 
