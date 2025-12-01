@@ -1,59 +1,92 @@
 import re
 import csv
+import os
+import sys
 
-def parse_snort_log(log_file):
+def parse_line(line):
     """
-    Parses a Snort alert log file forwarded by syslog and extracts key information.
-    
-    Args:
-        log_file (str): The path to the log file (e.g., /var/log/snort_alerts.log).
-        
-    Returns:
-        list: A list of dictionaries, where each dictionary represents an alert.
+    Tries to parse a log line using multiple known Snort formats.
+    Returns a dictionary if successful, None otherwise.
     """
-    alerts = []
-    # UPDATED Regex to capture the components of a syslog-formatted Snort alert
-    # This now handles the new timestamp, hostname, and process name.
-    log_pattern = re.compile(
-        r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}-\d{2}:\d{2})\s"  # 1: Full timestamp
-        r"\w+\s+snort:\s+"                                   # Matches "kali snort: " (non-capturing)
-        r"\[(\d+:\d+:\d+)\]\s"                                 # 2: Signature ID (GID:SID:REV)
-        r"\"(.+?)\"\s.*?"                                    # 3: Message (flexible match for priority field)
-        r"{\w+}\s"                                           # Protocol (e.g., {TCP})
-        r"([\d\.:]+?):(\d+)?\s->\s"                             # 4: Source IP, 5: Source Port
-        r"([\d\.:]+?):(\d+)?"                                # 6: Dest IP, 7: Dest Port
+    # --- Regex 1: Syslog Format (Live Forwarding) ---
+    # Example: 2025-10-16T18:55:48-05:00 kali snort: [1:1000001:1] "Message" ...
+    syslog_pattern = re.compile(
+        r"(\d{4}-\d{2}-\d{2}T[\d:\.\-\+]+)\s+"       # Timestamp (ISO 8601)
+        r"\S+\s+snort:\s+"                           # Hostname + process
+        r"\[(\d+:\d+:\d+)\]\s+"                      # Signature ID
+        r"\"(.*?)\"\s+"                              # Message
+        r"(?:\[Classification:.*?\]\s+)?(?:\[Priority: \d+\]\s+)?" # Optional Metadata
+        r"\{(.*?)\}\s+"                              # Protocol
+        r"(\d{1,3}(?:\.\d{1,3}){3})(?::(\d+))?\s+->\s+" # Source IP : Port (Optional)
+        r"(\d{1,3}(?:\.\d{1,3}){3})(?::(\d+))?"      # Dest IP : Port (Optional)
     )
 
-    try:
-        with open(log_file, 'r') as f:
-            for line in f:
-                match = log_pattern.search(line) # Use .search() for more flexibility
-                if match:
-                    alert = {
-                        'timestamp': match.group(1),
-                        'signature_id': match.group(2),
-                        'message': match.group(3),
-                        'source_ip': match.group(4),
-                        'source_port': match.group(5) if match.group(5) else 'N/A',
-                        'dest_ip': match.group(6),
-                        'dest_port': match.group(7) if match.group(7) else 'N/A',
-                    }
-                    alerts.append(alert)
-    except FileNotFoundError:
-        print(f"Error: Log file not found at {log_file}")
-        return []
-    except PermissionError:
-        print(f"Error: Permission denied to read {log_file}. Try running with 'sudo'.")
-        return []
+    # --- Regex 2: Standard Snort Format (Fast Alert / PCAP Output) ---
+    # Example: 10/24-12:00:00.123456 [**] [1:1000...] "Message" ...
+    standard_pattern = re.compile(
+        r"(\d{2}/\d{2}-\d{2}:\d{2}:\d{2}\.\d+)\s+"   # Timestamp (Snort custom)
+        r"\[\*\*\]\s+"                               # Marker
+        r"\[(\d+:\d+:\d+)\]\s+"                      # Signature ID
+        r"\"(.*?)\"\s+"                              # Message
+        r"(?:\[\*\*\]\s+)?"                          # Optional Marker
+        r"(?:\[Classification:.*?\]\s+)?(?:\[Priority: \d+\]\s+)?" # Optional Metadata
+        r"\{(.*?)\}\s+"                              # Protocol
+        r"(\d{1,3}(?:\.\d{1,3}){3})(?::(\d+))?\s+->\s+" # Source IP : Port
+        r"(\d{1,3}(?:\.\d{1,3}){3})(?::(\d+))?"      # Dest IP : Port
+    )
+
+    # Attempt Match: Syslog
+    match = syslog_pattern.search(line)
+    if match:
+        return {
+            'timestamp': match.group(1),
+            'signature_id': match.group(2),
+            'message': match.group(3),
+            'protocol': match.group(4),
+            'source_ip': match.group(5),
+            'source_port': match.group(6) if match.group(6) else '0', # Default to 0 if no port (e.g. ICMP)
+            'dest_ip': match.group(7),
+            'dest_port': match.group(8) if match.group(8) else '0'
+        }
+
+    # Attempt Match: Standard
+    match = standard_pattern.search(line)
+    if match:
+        return {
+            'timestamp': match.group(1),
+            'signature_id': match.group(2),
+            'message': match.group(3),
+            'protocol': match.group(4),
+            'source_ip': match.group(5),
+            'source_port': match.group(6) if match.group(6) else '0',
+            'dest_ip': match.group(7),
+            'dest_port': match.group(8) if match.group(8) else '0'
+        }
         
+    return None
+
+def parse_snort_log_file(log_file_path):
+    """Reads a single file and returns a list of parsed alert dicts."""
+    alerts = []
+    if not os.path.exists(log_file_path):
+        print(f"[-] File not found (skipping): {log_file_path}")
+        return alerts
+
+    print(f"[+] Parsing {log_file_path}...")
+    try:
+        with open(log_file_path, 'r', encoding='utf-8', errors='replace') as f:
+            for line in f:
+                alert = parse_line(line)
+                if alert:
+                    alerts.append(alert)
+        print(f"    -> Found {len(alerts)} valid alerts.")
+    except PermissionError:
+        print(f"    [ERROR] Permission denied reading {log_file_path}. Try running with sudo.")
     return alerts
 
 def save_to_csv(alerts, csv_file):
-    """
-    Saves a list of alert dictionaries to a CSV file.
-    """
     if not alerts:
-        print("No matching alerts found in the log file to save.")
+        print("[-] No alerts to save.")
         return
         
     keys = alerts[0].keys()
@@ -62,17 +95,21 @@ def save_to_csv(alerts, csv_file):
             writer = csv.DictWriter(f, fieldnames=keys)
             writer.writeheader()
             writer.writerows(alerts)
-        print(f"Successfully saved {len(alerts)} alerts to {csv_file}")
+        print(f"\n[SUCCESS] Saved {len(alerts)} total alerts to {csv_file}")
     except PermissionError:
-        print(f"Error: Permission denied to write to {csv_file}. Check directory permissions.")
+        print(f"\n[ERROR] Permission denied writing to {csv_file}.")
 
-
-# Main execution
+# --- Main Execution ---
 if __name__ == "__main__":
-    # Point this to your dedicated snort log file on the Mint machine
-    log_file_path = '/var/log/snort_alerts.log'
-    csv_output_file = 'snort_alerts.csv'
+    # List of files to process
+    # 1. The live syslog file
+    # 2. The offline PCAP analysis file (we'll name it snort_pcap_alerts.txt)
+    input_files = ['/var/log/snort_alerts.log', 'snort_pcap_alerts.txt']
+    output_file = 'snort_alerts.csv'
     
-    parsed_alerts = parse_snort_log(log_file_path)
-    save_to_csv(parsed_alerts, csv_output_file)
+    all_alerts = []
+    
+    for log_file in input_files:
+        all_alerts.extend(parse_snort_log_file(log_file))
 
+    save_to_csv(all_alerts, output_file)
