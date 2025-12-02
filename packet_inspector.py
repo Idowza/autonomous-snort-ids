@@ -103,6 +103,30 @@ def generate_rule(meta):
     except:
         return None
 
+def is_duplicate_rule(new_rule_text):
+    """Checks if a rule with the same core logic already exists."""
+    if not os.path.exists(SUGGESTED_RULES_FILE):
+        return False
+    try:
+        with open(SUGGESTED_RULES_FILE, 'r') as f:
+            existing_content = f.read()
+        
+        # Check if the exact rule string exists
+        if new_rule_text.strip() in existing_content:
+            return True
+            
+        # Check if a rule with the same message already exists
+        # This prevents flooding with identical rules for the same attack type
+        msg_match = re.search(r'msg:"([^"]+)"', new_rule_text)
+        if msg_match:
+            msg_content = msg_match.group(1)
+            if msg_content in existing_content:
+                return True
+                
+        return False
+    except Exception:
+        return False
+
 def packet_callback(packet):
     """Called for every single packet sniffed."""
     result = extract_features_from_packet(packet)
@@ -126,9 +150,13 @@ def packet_callback(packet):
             # 2. Generate Rule
             rule = generate_rule(meta)
             if rule:
-                print(f"        Proposed Rule: {rule}")
-                with open(SUGGESTED_RULES_FILE, "a") as f:
-                    f.write(f"# Auto-generated for {reason}\n{rule}\n\n")
+                # 3. Check for duplicates before writing
+                if not is_duplicate_rule(rule):
+                    print(f"        Proposed Rule: {rule}")
+                    with open(SUGGESTED_RULES_FILE, "a") as f:
+                        f.write(f"# Auto-generated for {reason}\n{rule}\n\n")
+                else:
+                    print(f"        [i] Duplicate rule suppressed.")
                     
     except Exception as e:
         pass # Keep sniffing even if one packet fails
