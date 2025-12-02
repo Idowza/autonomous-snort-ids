@@ -6,9 +6,10 @@ import sys
 import os
 
 # --- Configuration ---
-MODEL_NAME = 'llama3.1:8b' 
+MODEL_NAME = 'llama3' 
 ALERTS_FILE = 'snort_alerts.csv'
 CURSOR_FILE = 'alert_cursor.txt'
+SUGGESTED_RULES_FILE = 'suggested_rules.txt' # Define filename clearly
 
 def engineer_features_for_single_alert(alert_info):
     """ Engineers features for a single alert row. """
@@ -104,6 +105,32 @@ def get_new_alerts():
     else:
         return pd.DataFrame() # Empty dataframe if no new data
 
+def is_duplicate_rule(new_rule_text):
+    """Checks if a rule with the same core logic already exists."""
+    if not os.path.exists(SUGGESTED_RULES_FILE):
+        return False
+        
+    try:
+        with open(SUGGESTED_RULES_FILE, 'r') as f:
+            existing_content = f.read()
+            
+        # Simple check: does the exact rule string exist?
+        if new_rule_text.strip() in existing_content:
+            return True
+            
+        # Advanced check: Extract the 'msg' part and see if we already have a rule for this msg
+        # This prevents multiple rules for the exact same attack signature
+        msg_match = re.search(r'msg:"([^"]+)"', new_rule_text)
+        if msg_match:
+            msg_content = msg_match.group(1)
+            if msg_content in existing_content:
+                return True
+                
+        return False
+    except Exception as e:
+        print(f"[WARN] Could not check for duplicates: {e}")
+        return False
+
 # --- Main Execution ---
 if __name__ == "__main__":
     # 1. Load models
@@ -124,10 +151,13 @@ if __name__ == "__main__":
     # 3. Iterate through each new alert
     for index, row in new_alerts_df.iterrows():
         alert_msg = row['message']
-        print(f"\n--- Analyzing Alert #{index}: {alert_msg[:50]}... ---")
+        # Skip analyzing if the message is just "Generic" or "Benign" (optimization)
+        if "Benign" in str(alert_msg): 
+            continue
+
+        print(f"\n--- Analyzing Alert #{index}: {str(alert_msg)[:50]}... ---")
         
         # Prepare data for model
-        # Note: We need to construct a dict similar to what we used before
         alert_info = {
             'message': row['message'],
             'source_ip': row.get('source_ip', '$EXTERNAL_NET'),
@@ -167,13 +197,16 @@ if __name__ == "__main__":
                 rule = rule.replace('```', '').replace('snort', '').strip()
                 rule = re.sub(r'src ip \S+', '', rule, flags=re.IGNORECASE)
                 rule = re.sub(r'dst port \S+', '', rule, flags=re.IGNORECASE)
-                rule = re.sub(' +', ' ', rule)
+                rule = re.sub(r' +', ' ', rule)
                 
-                # Append to suggested rules file
-                with open("suggested_rules.txt", "a") as f: 
-                    f.write(f"# Rule for Alert #{index}: {alert_msg}\n")
-                    f.write(rule + "\n\n")
-                print("    [+] Rule appended to suggested_rules.txt")
+                # --- De-Duplication Check ---
+                if not is_duplicate_rule(rule):
+                    with open(SUGGESTED_RULES_FILE, "a") as f: 
+                        f.write(f"# Rule for Alert #{index}: {alert_msg}\n")
+                        f.write(rule + "\n\n")
+                    print("    [+] New rule appended to suggested_rules.txt")
+                else:
+                    print("    [i] Duplicate rule detected. Skipping write.")
                 
             except Exception as e:
                 print(f"    [-] Error calling Ollama: {e}")
