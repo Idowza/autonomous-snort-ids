@@ -121,33 +121,42 @@ def is_duplicate_rule(new_rule_text):
         return False
 
 def extract_valid_rule(text):
-    """ Robustly extracts the Snort rule from AI output. """
-    # 1. Clean up common markdown and headers
+    """ 
+    Simplified extractor that just looks for 'alert' and the ending ';)'
+    without strict regex validation. 
+    """
+    # 1. Clean up common markdown
     text = text.replace("```snort", "").replace("```", "").strip()
     
-    # 2. Try Regex first (Flexible)
-    # Looks for: alert [protocol] [src] [port] -> [dest] [port] ( [options] )
-    snort_pattern = r'(alert\s+\w+\s+\S+\s+\S+\s+->\s+\S+\s+\S+\s+\(.*\)\s*;)'
-    match = re.search(snort_pattern, text, re.IGNORECASE | re.DOTALL)
+    # 2. Find start of rule
+    # We search for the word 'alert' followed by a space
+    start_match = re.search(r'\balert\s', text)
+    if not start_match:
+        return None
     
-    if match:
-        rule = match.group(1)
-        rule = re.sub(r'\n', ' ', rule) # Remove newlines
-        rule = re.sub(r'\s+', ' ', rule) # Remove double spaces
-        return rule.strip()
+    start_index = start_match.start()
+    
+    # 3. Find end of rule
+    # We look for the last occurrence of ');' which ends standard Snort rules
+    end_index = text.rfind(');')
+    
+    if end_index == -1 or end_index < start_index:
+        # Fallback: try finding just a semicolon if ); is missing
+        end_index = text.rfind(';')
+        if end_index == -1: return None
+        # If we found just a semicolon, we'll append the ) later manually if needed,
+        # but usually a rule ends with );
         
-    # 3. Fallback: Simple String Slicing
-    # If regex fails, just look for the start and end of a standard rule
-    start_idx = text.find("alert")
-    end_idx = text.rfind(");")
+    # 4. Extract the substring
+    rule = text[start_index : end_index + 2] # include the );
     
-    if start_idx != -1 and end_idx != -1:
-        rule = text[start_idx : end_index + 2] # +2 to include );
-        rule = re.sub(r'\n', ' ', rule)
-        rule = re.sub(r'\s+', ' ', rule)
-        return rule.strip()
-
-    return None
+    # 5. Flatten newlines
+    rule = rule.replace('\n', ' ').replace('\r', '')
+    
+    # 6. Collapse multiple spaces
+    rule = re.sub(r'\s+', ' ', rule)
+    
+    return rule.strip()
 
 def generate_unique_sid():
     """Generates a time-based SID to ensure uniqueness."""
@@ -241,8 +250,8 @@ if __name__ == "__main__":
                     else:
                         print("    [i] Rule already exists in suggested_rules.txt. Skipping.")
                 else:
-                    print("    [!] AI response was not a valid rule. Skipping.")
-                    # print(f"    [DEBUG] Raw: {raw_output[:50]}...") # Uncomment for debug
+                    print("    [!] AI response format issue (Skipping).")
+                    print(f"    [DEBUG] Output: {raw_output[:100]}...") 
 
             except Exception as e:
                 print(f"    [-] Error calling Ollama: {e}")
