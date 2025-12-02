@@ -6,10 +6,10 @@ import sys
 import os
 
 # --- Configuration ---
-MODEL_NAME = 'llama3' 
+MODEL_NAME = 'llama3.1:8b' 
 ALERTS_FILE = 'snort_alerts.csv'
 CURSOR_FILE = 'alert_cursor.txt'
-SUGGESTED_RULES_FILE = 'suggested_rules.txt' # Define filename clearly
+SUGGESTED_RULES_FILE = 'suggested_rules.txt'
 
 def engineer_features_for_single_alert(alert_info):
     """ Engineers features for a single alert row. """
@@ -58,22 +58,21 @@ def generate_snort_rule_prompt(alert_info):
        - classtype:attempted-admin
        - sid:<generate_unique_id>
        - rev:1
-    4. FORMAT: Output ONLY the raw rule line. No markdown, no explanations.
+    4. FORMAT: Output ONLY the raw rule line.
+
+    CORRECT EXAMPLE:
+    alert tcp any any -> $HOME_NET 80 (msg:"MALWARE-OTHER Log4j JNDI injection attempt"; flow:to_server,established; content:"${{jndi:ldap://"; fast_pattern; classtype:attempted-admin; sid:1000005; rev:1;)
 
     OUTPUT:
     """
     return prompt
 
 def get_new_alerts():
-    """
-    Reads only rows from the CSV that haven't been processed yet.
-    Uses a cursor file to track position.
-    """
+    """ Reads only rows from the CSV that haven't been processed yet. """
     if not os.path.exists(ALERTS_FILE):
         print(f"Error: {ALERTS_FILE} not found.")
         return pd.DataFrame()
 
-    # 1. Read the full CSV
     try:
         df = pd.read_csv(ALERTS_FILE)
     except Exception as e:
@@ -82,7 +81,6 @@ def get_new_alerts():
     
     current_row_count = len(df)
 
-    # 2. Read the cursor (where did we stop last time?)
     last_processed_index = 0
     if os.path.exists(CURSOR_FILE):
         try:
@@ -91,45 +89,49 @@ def get_new_alerts():
         except:
             last_processed_index = 0
     
-    # 3. Filter for new rows
     if current_row_count > last_processed_index:
         new_data = df.iloc[last_processed_index:]
         print(f"[INFO] Found {len(new_data)} new alerts to process.")
         
-        # Update cursor immediately to avoid re-processing if script crashes midway
-        # (In a real production system, you'd update this AFTER processing)
         with open(CURSOR_FILE, 'w') as f:
             f.write(str(current_row_count))
             
         return new_data
     else:
-        return pd.DataFrame() # Empty dataframe if no new data
+        return pd.DataFrame()
 
 def is_duplicate_rule(new_rule_text):
     """Checks if a rule with the same core logic already exists."""
     if not os.path.exists(SUGGESTED_RULES_FILE):
         return False
-        
     try:
         with open(SUGGESTED_RULES_FILE, 'r') as f:
             existing_content = f.read()
-            
-        # Simple check: does the exact rule string exist?
         if new_rule_text.strip() in existing_content:
             return True
-            
-        # Advanced check: Extract the 'msg' part and see if we already have a rule for this msg
-        # This prevents multiple rules for the exact same attack signature
         msg_match = re.search(r'msg:"([^"]+)"', new_rule_text)
         if msg_match:
             msg_content = msg_match.group(1)
             if msg_content in existing_content:
                 return True
-                
         return False
     except Exception as e:
-        print(f"[WARN] Could not check for duplicates: {e}")
         return False
+
+def extract_valid_rule(text):
+    """ Uses Regex to extract strictly formatted Snort rules from AI chatter. """
+    # Pattern looks for: ACTION PROTOCOL IP PORT DIR IP PORT (OPTIONS)
+    # We catch common actions: alert, log, pass, drop, reject, sdrop
+    snort_pattern = r'((?:alert|log|pass|drop|reject|sdrop)\s+[\w\d\$\._\[\]\:]+\s+[\w\d\$\._\[\]\:]+\s+->\s+[\w\d\$\._\[\]\:]+\s+[\w\d\$\._\[\]\:]+\s+\(.*?\)\s*;)'
+    
+    match = re.search(snort_pattern, text, re.IGNORECASE | re.DOTALL)
+    if match:
+        rule = match.group(1)
+        # Cleanup common hallucinations inside the extracted block
+        rule = re.sub(r'\n', ' ', rule) # Remove newlines in rule
+        rule = re.sub(r'\s+', ' ', rule) # Remove double spaces
+        return rule.strip()
+    return None
 
 # --- Main Execution ---
 if __name__ == "__main__":
@@ -145,19 +147,16 @@ if __name__ == "__main__":
     new_alerts_df = get_new_alerts()
     
     if new_alerts_df.empty:
-        # Silent exit if nothing new (keeps logs clean in loop)
         sys.exit(0)
 
     # 3. Iterate through each new alert
     for index, row in new_alerts_df.iterrows():
         alert_msg = row['message']
-        # Skip analyzing if the message is just "Generic" or "Benign" (optimization)
         if "Benign" in str(alert_msg): 
             continue
 
         print(f"\n--- Analyzing Alert #{index}: {str(alert_msg)[:50]}... ---")
         
-        # Prepare data for model
         alert_info = {
             'message': row['message'],
             'source_ip': row.get('source_ip', '$EXTERNAL_NET'),
@@ -167,7 +166,6 @@ if __name__ == "__main__":
 
         feature_df = engineer_features_for_single_alert(alert_info)
         
-        # Predict
         try:
             cls_pred = classifier_pipeline.predict(feature_df)[0]
             anom_pred = anomaly_pipeline.predict(feature_df)[0]
@@ -175,7 +173,6 @@ if __name__ == "__main__":
             print(f"Model error on row {index}: {e}")
             continue
 
-        # Logic
         is_malicious = (cls_pred == 1)
         is_anomaly = (anom_pred == -1)
         
@@ -193,21 +190,23 @@ if __name__ == "__main__":
                     stream=False
                 )
                 
-                rule = response['message']['content']
-                rule = rule.replace('```', '').replace('snort', '').strip()
-                rule = re.sub(r'src ip \S+', '', rule, flags=re.IGNORECASE)
-                rule = re.sub(r'dst port \S+', '', rule, flags=re.IGNORECASE)
-                rule = re.sub(r' +', ' ', rule)
+                raw_output = response['message']['content']
                 
-                # --- De-Duplication Check ---
-                if not is_duplicate_rule(rule):
-                    with open(SUGGESTED_RULES_FILE, "a") as f: 
-                        f.write(f"# Rule for Alert #{index}: {alert_msg}\n")
-                        f.write(rule + "\n\n")
-                    print("    [+] New rule appended to suggested_rules.txt")
+                # --- EXTRACT VALID RULE ---
+                rule = extract_valid_rule(raw_output)
+                
+                if rule:
+                    if not is_duplicate_rule(rule):
+                        with open(SUGGESTED_RULES_FILE, "a") as f: 
+                            f.write(f"# Rule for Alert #{index}: {alert_msg}\n")
+                            f.write(rule + "\n\n")
+                        print("    [+] Valid rule extracted and appended.")
+                    else:
+                        print("    [i] Duplicate rule detected. Skipping write.")
                 else:
-                    print("    [i] Duplicate rule detected. Skipping write.")
-                
+                    print("    [!] AI output did not contain a valid Snort rule format.")
+                    print(f"    [DEBUG] AI Raw Output: {raw_output[:50]}...")
+
             except Exception as e:
                 print(f"    [-] Error calling Ollama: {e}")
         else:
