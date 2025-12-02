@@ -4,6 +4,8 @@ import pandas as pd
 import re
 import sys
 import os
+import time
+import random
 
 # --- Configuration ---
 MODEL_NAME = 'llama3.1:8b' 
@@ -56,12 +58,12 @@ def generate_snort_rule_prompt(alert_info):
     3. METADATA:
        - flow:to_server, established
        - classtype:attempted-admin
-       - sid:<generate_unique_id>
+       - sid:1000005
        - rev:1
     4. FORMAT: Output ONLY the raw rule line.
 
     CORRECT EXAMPLE:
-    alert tcp any any -> $HOME_NET 80 (msg:"MALWARE-OTHER Log4j JNDI injection attempt"; flow:to_server,established; content:"${{jndi:ldap://"; fast_pattern; classtype:attempted-admin; sid:1000005; rev:1;)
+    alert tcp any any -> $HOME_NET 80 (msg:"MALWARE-OTHER Log4j JNDI injection attempt"; flow:to_server,established; content:"${{jndi:ldap://"; classtype:attempted-admin; sid:1000005; rev:1;)
 
     OUTPUT:
     """
@@ -107,10 +109,8 @@ def is_duplicate_rule(new_rule_text):
     try:
         with open(SUGGESTED_RULES_FILE, 'r') as f:
             existing_content = f.read()
-        # Check if the exact rule string exists
         if new_rule_text.strip() in existing_content:
             return True
-        # Check if a rule with the same message already exists
         msg_match = re.search(r'msg:"([^"]+)"', new_rule_text)
         if msg_match:
             msg_content = msg_match.group(1)
@@ -121,25 +121,21 @@ def is_duplicate_rule(new_rule_text):
         return False
 
 def extract_valid_rule(text):
-    """ Uses a looser Regex to find the rule line. """
-    # Find line starting with action and ending with );
-    # Handles code fences, extra text, etc. by ignoring them
-    lines = text.split('\n')
-    for line in lines:
-        line = line.strip()
-        # Remove markdown code ticks
-        line = line.replace('`', '')
-        # Check for basic Snort rule structure
-        if line.startswith(('alert', 'log', 'pass', 'drop', 'reject', 'sdrop')) and line.endswith(';)'):
-             return line
-             
-    # Fallback: Regex search in full block
-    snort_pattern = r'(alert\s+.*?\(.*?\)\;)'
+    """ Uses Regex to extract strictly formatted Snort rules. """
+    snort_pattern = r'((?:alert|log|pass|drop|reject|sdrop)\s+\S+\s+\S+\s+\S+\s+->\s+\S+\s+\S+\s+\(.*?\)\s*;)'
     match = re.search(snort_pattern, text, re.IGNORECASE | re.DOTALL)
     if match:
-        return match.group(1).replace('\n', ' ').strip()
-        
+        rule = match.group(1)
+        rule = re.sub(r'\n', ' ', rule)
+        rule = re.sub(r'\s+', ' ', rule)
+        return rule.strip()
     return None
+
+def generate_unique_sid():
+    """Generates a time-based SID to ensure uniqueness."""
+    # Snort local rules typically start at 1000000. 
+    # Using timestamp ensures we don't collide easily.
+    return int(time.time())
 
 # --- Main Execution ---
 if __name__ == "__main__":
@@ -157,8 +153,7 @@ if __name__ == "__main__":
     if new_alerts_df.empty:
         sys.exit(0)
 
-    # --- OPTIMIZATION: De-duplicate based on Alert Message ---
-    # This prevents generating 100 rules for 100 identical ping alerts
+    # De-duplicate
     unique_alerts = new_alerts_df.drop_duplicates(subset=['message'])
     print(f"[INFO] Consolidated {len(new_alerts_df)} alerts into {len(unique_alerts)} unique threats.")
 
@@ -209,16 +204,31 @@ if __name__ == "__main__":
                 rule = extract_valid_rule(raw_output)
                 
                 if rule:
-                    # Clean up common AI hallucinations in the rule itself
+                    # --- CLEANUP STEPS ---
+                    # 1. Remove common AI hallucinations in the rule text
                     rule = re.sub(r'src ip \S+', '', rule, flags=re.IGNORECASE)
                     rule = re.sub(r'dst port \S+', '', rule, flags=re.IGNORECASE)
+                    
+                    # 2. Remove 'fast_pattern' to prevent syntax errors
+                    rule = rule.replace('fast_pattern;', '')
+                    
+                    # 3. Inject Valid SID
+                    # Replaces 'sid:<whatever>;' with a real timestamp-based SID
+                    new_sid = generate_unique_sid()
+                    if "sid:" in rule:
+                        rule = re.sub(r'sid:[^;]+;', f'sid:{new_sid};', rule)
+                    else:
+                        # If AI forgot SID, add it at the end
+                        rule = rule.replace(')', f'; sid:{new_sid}; rev:1;)')
+
+                    # 4. Fix spaces
                     rule = re.sub(r'\s+', ' ', rule)
 
                     if not is_duplicate_rule(rule):
                         with open(SUGGESTED_RULES_FILE, "a") as f: 
                             f.write(f"# Rule for Alert: {alert_msg}\n")
                             f.write(rule + "\n\n")
-                        print("    [+] Rule generated and saved.")
+                        print(f"    [+] Rule generated and saved (SID: {new_sid}).")
                     else:
                         print("    [i] Rule already exists in suggested_rules.txt. Skipping.")
                 else:
