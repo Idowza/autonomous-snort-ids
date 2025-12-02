@@ -4,8 +4,6 @@ import pandas as pd
 import re
 import sys
 import os
-import time
-import random
 
 # --- Configuration ---
 MODEL_NAME = 'llama3.1:8b' 
@@ -58,7 +56,7 @@ def generate_snort_rule_prompt(alert_info):
     3. METADATA:
        - flow:to_server, established
        - classtype:attempted-admin
-       - sid:1000005
+       - sid:<generate_unique_id>
        - rev:1
     4. FORMAT: Output ONLY the raw rule line.
 
@@ -121,21 +119,22 @@ def is_duplicate_rule(new_rule_text):
         return False
 
 def extract_valid_rule(text):
-    """ Uses Regex to extract strictly formatted Snort rules. """
-    snort_pattern = r'((?:alert|log|pass|drop|reject|sdrop)\s+\S+\s+\S+\s+\S+\s+->\s+\S+\s+\S+\s+\(.*?\)\s*;)'
+    """ Uses a robust Regex to find the rule line. """
+    # Strategy 1: Look for the most common start/end pattern
+    # Matches: "alert ... (...);" across multiple lines if needed
+    # The re.DOTALL flag makes '.' match newlines
+    snort_pattern = r'(alert\s+.*?\)\s*;)'
+    
     match = re.search(snort_pattern, text, re.IGNORECASE | re.DOTALL)
     if match:
         rule = match.group(1)
+        # Flatten multiline rules into single line
         rule = re.sub(r'\n', ' ', rule)
+        # Remove extra spaces
         rule = re.sub(r'\s+', ' ', rule)
         return rule.strip()
+        
     return None
-
-def generate_unique_sid():
-    """Generates a time-based SID to ensure uniqueness."""
-    # Snort local rules typically start at 1000000. 
-    # Using timestamp ensures we don't collide easily.
-    return int(time.time())
 
 # --- Main Execution ---
 if __name__ == "__main__":
@@ -204,35 +203,21 @@ if __name__ == "__main__":
                 rule = extract_valid_rule(raw_output)
                 
                 if rule:
-                    # --- CLEANUP STEPS ---
-                    # 1. Remove common AI hallucinations in the rule text
+                    # Clean up common AI hallucinations in the rule text
                     rule = re.sub(r'src ip \S+', '', rule, flags=re.IGNORECASE)
                     rule = re.sub(r'dst port \S+', '', rule, flags=re.IGNORECASE)
-                    
-                    # 2. Remove 'fast_pattern' to prevent syntax errors
-                    rule = rule.replace('fast_pattern;', '')
-                    
-                    # 3. Inject Valid SID
-                    # Replaces 'sid:<whatever>;' with a real timestamp-based SID
-                    new_sid = generate_unique_sid()
-                    if "sid:" in rule:
-                        rule = re.sub(r'sid:[^;]+;', f'sid:{new_sid};', rule)
-                    else:
-                        # If AI forgot SID, add it at the end
-                        rule = rule.replace(')', f'; sid:{new_sid}; rev:1;)')
-
-                    # 4. Fix spaces
                     rule = re.sub(r'\s+', ' ', rule)
 
                     if not is_duplicate_rule(rule):
                         with open(SUGGESTED_RULES_FILE, "a") as f: 
                             f.write(f"# Rule for Alert: {alert_msg}\n")
                             f.write(rule + "\n\n")
-                        print(f"    [+] Rule generated and saved (SID: {new_sid}).")
+                        print("    [+] Rule generated and saved.")
                     else:
                         print("    [i] Rule already exists in suggested_rules.txt. Skipping.")
                 else:
                     print("    [!] AI response was not a valid rule. Skipping.")
+                    print(f"    [DEBUG] AI Raw Output Start: {raw_output[:100]}...") # Print debug info
 
             except Exception as e:
                 print(f"    [-] Error calling Ollama: {e}")
