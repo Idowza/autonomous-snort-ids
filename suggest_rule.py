@@ -107,8 +107,10 @@ def is_duplicate_rule(new_rule_text):
     try:
         with open(SUGGESTED_RULES_FILE, 'r') as f:
             existing_content = f.read()
+        # Check if the exact rule string exists
         if new_rule_text.strip() in existing_content:
             return True
+        # Check if a rule with the same message already exists
         msg_match = re.search(r'msg:"([^"]+)"', new_rule_text)
         if msg_match:
             msg_content = msg_match.group(1)
@@ -119,18 +121,24 @@ def is_duplicate_rule(new_rule_text):
         return False
 
 def extract_valid_rule(text):
-    """ Uses Regex to extract strictly formatted Snort rules from AI chatter. """
-    # Corrected Regex: Looks for ACTION PROTO SRC_IP SRC_PORT -> DST_IP DST_PORT (OPTIONS)
-    # Uses \S+ to match any non-whitespace block (IPs, ports, variables)
-    snort_pattern = r'((?:alert|log|pass|drop|reject|sdrop)\s+\S+\s+\S+\s+\S+\s+->\s+\S+\s+\S+\s+\(.*?\)\s*;)'
-    
+    """ Uses a looser Regex to find the rule line. """
+    # Find line starting with action and ending with );
+    # Handles code fences, extra text, etc. by ignoring them
+    lines = text.split('\n')
+    for line in lines:
+        line = line.strip()
+        # Remove markdown code ticks
+        line = line.replace('`', '')
+        # Check for basic Snort rule structure
+        if line.startswith(('alert', 'log', 'pass', 'drop', 'reject', 'sdrop')) and line.endswith(';)'):
+             return line
+             
+    # Fallback: Regex search in full block
+    snort_pattern = r'(alert\s+.*?\(.*?\)\;)'
     match = re.search(snort_pattern, text, re.IGNORECASE | re.DOTALL)
     if match:
-        rule = match.group(1)
-        # Cleanup common hallucinations inside the extracted block
-        rule = re.sub(r'\n', ' ', rule) # Remove newlines in rule
-        rule = re.sub(r'\s+', ' ', rule) # Remove double spaces
-        return rule.strip()
+        return match.group(1).replace('\n', ' ').strip()
+        
     return None
 
 # --- Main Execution ---
@@ -149,13 +157,18 @@ if __name__ == "__main__":
     if new_alerts_df.empty:
         sys.exit(0)
 
-    # 3. Iterate through each new alert
-    for index, row in new_alerts_df.iterrows():
+    # --- OPTIMIZATION: De-duplicate based on Alert Message ---
+    # This prevents generating 100 rules for 100 identical ping alerts
+    unique_alerts = new_alerts_df.drop_duplicates(subset=['message'])
+    print(f"[INFO] Consolidated {len(new_alerts_df)} alerts into {len(unique_alerts)} unique threats.")
+
+    # 3. Iterate through UNIQUE new alerts
+    for index, row in unique_alerts.iterrows():
         alert_msg = row['message']
-        if "Benign" in str(alert_msg): 
+        if "Benign" in str(alert_msg) or "Generic" in str(alert_msg): 
             continue
 
-        print(f"\n--- Analyzing Alert #{index}: {str(alert_msg)[:50]}... ---")
+        print(f"\n--- Analyzing Threat: {str(alert_msg)[:50]}... ---")
         
         alert_info = {
             'message': row['message'],
@@ -170,7 +183,7 @@ if __name__ == "__main__":
             cls_pred = classifier_pipeline.predict(feature_df)[0]
             anom_pred = anomaly_pipeline.predict(feature_df)[0]
         except Exception as e:
-            print(f"Model error on row {index}: {e}")
+            print(f"Model error: {e}")
             continue
 
         is_malicious = (cls_pred == 1)
@@ -180,7 +193,7 @@ if __name__ == "__main__":
         print(f"    Anomaly:    {'ANOMALY' if is_anomaly else 'Normal'}")
 
         if is_malicious or is_anomaly:
-            print("    [!] THREAT DETECTED. Generating Rule...")
+            print("    [!] THREAT DETECTED. Asking AI for rule...")
             
             prompt = generate_snort_rule_prompt(alert_info)
             try:
@@ -196,18 +209,22 @@ if __name__ == "__main__":
                 rule = extract_valid_rule(raw_output)
                 
                 if rule:
+                    # Clean up common AI hallucinations in the rule itself
+                    rule = re.sub(r'src ip \S+', '', rule, flags=re.IGNORECASE)
+                    rule = re.sub(r'dst port \S+', '', rule, flags=re.IGNORECASE)
+                    rule = re.sub(r'\s+', ' ', rule)
+
                     if not is_duplicate_rule(rule):
                         with open(SUGGESTED_RULES_FILE, "a") as f: 
-                            f.write(f"# Rule for Alert #{index}: {alert_msg}\n")
+                            f.write(f"# Rule for Alert: {alert_msg}\n")
                             f.write(rule + "\n\n")
-                        print("    [+] Valid rule extracted and appended.")
+                        print("    [+] Rule generated and saved.")
                     else:
-                        print("    [i] Duplicate rule detected. Skipping write.")
+                        print("    [i] Rule already exists in suggested_rules.txt. Skipping.")
                 else:
-                    print("    [!] AI output did not contain a valid Snort rule format.")
-                    print(f"    [DEBUG] AI Raw Output: {raw_output[:50]}...")
+                    print("    [!] AI response was not a valid rule. Skipping.")
 
             except Exception as e:
                 print(f"    [-] Error calling Ollama: {e}")
         else:
-            print("    [.] Alert classified as benign.")
+            print("    [.] Threat classified as benign/normal.")
