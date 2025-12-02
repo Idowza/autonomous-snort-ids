@@ -34,16 +34,7 @@ def engineer_features_for_single_alert(alert_info):
 def generate_snort_rule_prompt(alert_info):
     """ Constructs the prompt for Ollama. """
     src_ip = alert_info.get('source_ip', '$EXTERNAL_NET')
-    
-    # --- FIX: Explicit Port Handling ---
-    # Ensure dest_port is a string. If 0, force 'any'.
-    raw_port = alert_info['dest_port']
-    if str(raw_port) == '0':
-        dst_port_str = 'any'
-    else:
-        dst_port_str = str(raw_port)
-    # -----------------------------------
-
+    dst_port = alert_info['dest_port']
     message = alert_info['message']
     
     payload_hint = "unknown"
@@ -57,19 +48,19 @@ def generate_snort_rule_prompt(alert_info):
     
     THREAT DETAILS:
     - Source IP: {src_ip}
-    - Destination Port: {dst_port_str}
+    - Destination Port: {dst_port}
     - Full Alert Text: "{message}"
     - Suspected Payload: "{payload_hint}"
 
     STRICT REQUIREMENTS:
-    1. HEADER: Use 'alert tcp any any -> $HOME_NET {dst_port_str}'. Do NOT use port variables.
+    1. HEADER: Use 'alert tcp any any -> $HOME_NET {dst_port}'. Do NOT hardcode the destination IP.
     2. CONTENT: Match ONLY the specific malicious part of the payload (e.g., '{payload_hint}'), not the entire request.
     3. METADATA:
        - flow:to_server, established
        - classtype:attempted-admin
        - sid:1000005
        - rev:1
-    4. FORMAT: Output ONLY the raw rule line.
+    4. FORMAT: Output ONLY the raw rule line. Do not write "Here is the rule". Start directly with "alert".
 
     CORRECT EXAMPLE:
     alert tcp any any -> $HOME_NET 80 (msg:"MALWARE-OTHER Log4j JNDI injection attempt"; flow:to_server,established; content:"${{jndi:ldap://"; classtype:attempted-admin; sid:1000005; rev:1;)
@@ -130,14 +121,32 @@ def is_duplicate_rule(new_rule_text):
         return False
 
 def extract_valid_rule(text):
-    """ Uses Regex to extract strictly formatted Snort rules. """
-    snort_pattern = r'((?:alert|log|pass|drop|reject|sdrop)\s+\S+\s+\S+\s+\S+\s+->\s+\S+\s+\S+\s+\(.*?\)\s*;)'
+    """ Robustly extracts the Snort rule from AI output. """
+    # 1. Clean up common markdown and headers
+    text = text.replace("```snort", "").replace("```", "").strip()
+    
+    # 2. Try Regex first (Flexible)
+    # Looks for: alert [protocol] [src] [port] -> [dest] [port] ( [options] )
+    snort_pattern = r'(alert\s+\w+\s+\S+\s+\S+\s+->\s+\S+\s+\S+\s+\(.*\)\s*;)'
     match = re.search(snort_pattern, text, re.IGNORECASE | re.DOTALL)
+    
     if match:
         rule = match.group(1)
+        rule = re.sub(r'\n', ' ', rule) # Remove newlines
+        rule = re.sub(r'\s+', ' ', rule) # Remove double spaces
+        return rule.strip()
+        
+    # 3. Fallback: Simple String Slicing
+    # If regex fails, just look for the start and end of a standard rule
+    start_idx = text.find("alert")
+    end_idx = text.rfind(");")
+    
+    if start_idx != -1 and end_idx != -1:
+        rule = text[start_idx : end_index + 2] # +2 to include );
         rule = re.sub(r'\n', ' ', rule)
         rule = re.sub(r'\s+', ' ', rule)
         return rule.strip()
+
     return None
 
 def generate_unique_sid():
@@ -233,6 +242,7 @@ if __name__ == "__main__":
                         print("    [i] Rule already exists in suggested_rules.txt. Skipping.")
                 else:
                     print("    [!] AI response was not a valid rule. Skipping.")
+                    # print(f"    [DEBUG] Raw: {raw_output[:50]}...") # Uncomment for debug
 
             except Exception as e:
                 print(f"    [-] Error calling Ollama: {e}")
