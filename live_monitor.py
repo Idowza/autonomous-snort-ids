@@ -1,39 +1,61 @@
 import time
 import subprocess
 import os
+import sys
 
 # --- Configuration ---
-CHECK_INTERVAL = 10  # Check every 10 seconds
+CHECK_INTERVAL = 5  # How often to poll for threats (seconds)
+SCRIPT_PARSE = "parse_logs.py"
 SCRIPT_SUGGEST = "suggest_rule.py"
-SCRIPT_PARSE = "parse_logs.py" # Need to parse latest logs first!
-SCRIPT_TRAIN = "train_model.py" # Optional: Retrain if you want continuous learning
+SCRIPT_APPROVE = "approve_rules.py"
+RULES_FILE = "suggested_rules.txt"
 
-def run_command(command):
+def run_command(command, description):
+    """Runs a command and handles errors."""
     try:
         subprocess.run(command, shell=True, check=True)
-    except subprocess.CalledProcessError as e:
-        print(f"Error running {command}: {e}")
+        return True
+    except subprocess.CalledProcessError:
+        print(f"[!] Error during: {description}")
+        return False
 
-print("--- Starting Live Threat Monitor ---")
-print("Press Ctrl+C to stop.")
+def check_for_rules():
+    """Checks if the rules file exists and is not empty."""
+    if os.path.exists(RULES_FILE) and os.path.getsize(RULES_FILE) > 0:
+        return True
+    return False
 
-try:
-    while True:
-        print(f"\n[+] Checking for new alerts ({time.strftime('%X')})...")
-        
-        # 1. Parse the latest logs from Snort/Syslog
-        # This updates snort_alerts.csv with any new data
-        run_command(f"sudo python3 {SCRIPT_PARSE}")
-        
-        # 2. (Optional) Retrain models on the very latest data
-        # run_command(f"echo 0.1 | sudo python3 {SCRIPT_TRAIN}") 
+# --- Main Loop ---
+if __name__ == "__main__":
+    print("========================================================")
+    print("   AI-Enhanced IDS - Live Interactive Monitor")
+    print("   Scanning for threats every 5 seconds...")
+    print("========================================================")
 
-        # 3. Run the Suggest Rule script
-        # Note: suggest_rule.py currently processes a *simulated* alert.
-        # To make it truly live, suggest_rule.py needs to read the *latest* # real alert from snort_alerts.csv instead of the hardcoded one.
-        run_command(f"python3 {SCRIPT_SUGGEST}")
-        
-        time.sleep(CHECK_INTERVAL)
+    try:
+        while True:
+            # 1. Parse Logs (Silent update of CSV)
+            # We redirect output to /dev/null to keep the console clean unless there's an error
+            subprocess.run(f"sudo python3 {SCRIPT_PARSE} > /dev/null 2>&1", shell=True)
+            
+            # 2. Run Detection & Suggestion
+            # We let this print to console so you see "Analyzing..." messages
+            run_command(f"python3 {SCRIPT_SUGGEST}", "Threat Detection")
 
-except KeyboardInterrupt:
-    print("\n--- Monitor Stopped ---")
+            # 3. Check for New Rules
+            # Only launch the approval tool if the AI actually wrote something to the file
+            if check_for_rules():
+                print("\n[!] NEW RULES GENERATED - ACTION REQUIRED")
+                print(">>> Launching Approval Interface...")
+                
+                # Run approval script interactively
+                run_command(f"python3 {SCRIPT_APPROVE}", "Rule Approval")
+                
+                print(">>> Returning to Monitoring Mode...")
+            
+            # Wait for next cycle
+            time.sleep(CHECK_INTERVAL)
+
+    except KeyboardInterrupt:
+        print("\n\n[+] Monitor stopped by user.")
+        sys.exit(0)
