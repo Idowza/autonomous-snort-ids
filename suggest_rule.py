@@ -120,9 +120,9 @@ def is_duplicate_rule(new_rule_text):
 
 def extract_valid_rule(text):
     """ Uses Regex to extract strictly formatted Snort rules from AI chatter. """
-    # Pattern looks for: ACTION PROTOCOL IP PORT DIR IP PORT (OPTIONS)
-    # We catch common actions: alert, log, pass, drop, reject, sdrop
-    snort_pattern = r'((?:alert|log|pass|drop|reject|sdrop)\s+[\w\d\$\._\[\]\:]+\s+[\w\d\$\._\[\]\:]+\s+->\s+[\w\d\$\._\[\]\:]+\s+[\w\d\$\._\[\]\:]+\s+\(.*?\)\s*;)'
+    # Corrected Regex: Looks for ACTION PROTO SRC_IP SRC_PORT -> DST_IP DST_PORT (OPTIONS)
+    # Uses \S+ to match any non-whitespace block (IPs, ports, variables)
+    snort_pattern = r'((?:alert|log|pass|drop|reject|sdrop)\s+\S+\s+\S+\s+\S+\s+->\s+\S+\s+\S+\s+\(.*?\)\s*;)'
     
     match = re.search(snort_pattern, text, re.IGNORECASE | re.DOTALL)
     if match:
