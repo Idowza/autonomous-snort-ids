@@ -44,3 +44,8 @@ sudo chown syslog:adm /var/log/snort_alerts.log
 sudo chmod 640 /var/log/snort_alerts.log
 sudo systemctl restart rsyslog
 ```
+
+# Run Snort with PCAP directory
+```bash
+sudo snort -c /etc/snort/snort.lua -R /etc/snort/rules/local.rules --pcap-dir=/home/kali/pcap -k none -l /var/log/snort
+```
