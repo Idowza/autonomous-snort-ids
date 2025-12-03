@@ -18,12 +18,8 @@ import gc
 # Use absolute path to be safe
 DATASET_ROOT = os.path.abspath('datasets')
 
-# Limit total training size to prevent OOM crashes
-MAX_BENIGN_RECORDS = 500000
-MAX_MALICIOUS_RECORDS = 500000 
-
-# Default to 10% if not specified
-SAMPLE_RATE = 0.1 
+# Default to 5% to prevent accidental OOM on first run
+SAMPLE_RATE = 0.05
 
 def get_user_sample_rate():
     """ Asks the user for a sample rate. """
@@ -78,16 +74,20 @@ def load_and_process_generic(folder_path, dataset_name="Unknown Dataset"):
 
     for f in files:
         try:
-            try:
-                header = pd.read_csv(f, nrows=0, encoding='latin1')
-            except:
-                # Fallback for UNSW raw files
+            # FIX: Explicitly handle UNSW-NB15 to force headerless reading
+            if "UNSW-NB15" in dataset_name:
                 unsw_cols = ['srcip', 'sport', 'dstip', 'dsport', 'proto', 'state', 'dur', 'sbytes', 'dbytes', 'sttl', 'dttl', 'sloss', 'dloss', 'service', 'Sload', 'Dload', 'Spkts', 'Dpkts', 'swin', 'dwin', 'stcpb', 'dtcpb', 'smeansz', 'dmeansz', 'trans_depth', 'res_bdy_len', 'Sjit', 'Djit', 'Stime', 'Ltime', 'Sintpkt', 'Dintpkt', 'tcprtt', 'synack', 'ackdat', 'is_sm_ips_ports', 'ct_state_ttl', 'ct_flw_http_mthd', 'is_ftp_login', 'ct_ftp_cmd', 'ct_srv_src', 'ct_srv_dst', 'ct_dst_ltm', 'ct_src_ ltm', 'ct_src_dport_ltm', 'ct_dst_sport_ltm', 'ct_dst_src_ltm', 'attack_cat', 'Label']
+                # Read without header, assigning our own names
                 df = pd.read_csv(f, header=None, names=unsw_cols, encoding='latin1', low_memory=False)
+                
+                # Filter down immediately to save RAM
+                df = df[['dsport', 'attack_cat', 'Label']]
                 port_col = 'dsport'
                 label_col = 'Label'
-                msg_col = 'attack_cat'
+                
             else:
+                # Logic for standard datasets (CIC-IDS, etc) that usually HAVE headers
+                header = pd.read_csv(f, nrows=0, encoding='latin1')
                 port_col = find_column(header, ['Destination Port', 'Dst Port', 'dest_port', 'dsport', 'dp', 'Destination_Port'])
                 label_col = find_column(header, ['Label', 'label', 'class', 'attack_cat'])
                 
@@ -97,16 +97,21 @@ def load_and_process_generic(folder_path, dataset_name="Unknown Dataset"):
 
                 df = pd.read_csv(f, usecols=[port_col, label_col], encoding='latin1', low_memory=False)
 
+            # Apply sampling
             if len(df) > 50000:
                 df = df.sample(frac=SAMPLE_RATE, random_state=42)
 
             df.rename(columns={port_col: 'dest_port', label_col: 'raw_label'}, inplace=True)
             
-            if 'attack_cat' in df.columns:
+            # Map specific dataset nuances to 'message'
+            if "UNSW-NB15" in dataset_name and 'attack_cat' in df.columns:
+                 df['message'] = df['attack_cat'].fillna('Unknown Attack')
+            elif 'attack_cat' in df.columns:
                  df['message'] = df['attack_cat'].fillna('Unknown Attack')
             else:
                  df['message'] = df['raw_label'].astype(str)
 
+            # Standardize Label (0 = Benign, 1 = Malicious)
             df['label'] = df['raw_label'].astype(str).apply(
                 lambda x: 0 if any(benign in x.lower().strip() for benign in ['benign', 'normal', '0']) else 1
             )
@@ -145,9 +150,7 @@ if __name__ == "__main__":
         ('cicids2017', 'CIC-IDS-2017'),
         ('cicids2018', 'CSE-CIC-IDS2018'),
         ('unsw_nb15', 'UNSW-NB15 (Original)'),
-        ('cic_iov_2024', 'CIC-IoV-2024'),
-        ('cic_ddos_2019', 'CIC-DDoS-2019'),
-        ('cicev_2023', 'CICEV2023')
+        ('cic_ddos_2019', 'CIC-DDoS-2019')
     ]
 
     for folder, name in datasets_to_load:
@@ -167,37 +170,22 @@ if __name__ == "__main__":
     print(f"\n[+] Total Processed Records: {len(full_data)}")
     print(f"    Raw Class Distribution: {full_data['label'].value_counts().to_dict()}")
 
-    # --- SMART DOWNSAMPLING (Prevent OOM) ---
-    print("\n[-] Applying Smart Downsampling to prevent memory crash...")
-    
-    # Split by class
-    df_benign = full_data[full_data['label'] == 0]
-    df_malicious = full_data[full_data['label'] == 1]
-    
-    # Clear full_data to free memory immediately
-    del full_data
-    gc.collect()
-    
-    # Downsample Benign (Majority Class)
-    if len(df_benign) > MAX_BENIGN_RECORDS:
-        print(f"    Capping Benign traffic ({len(df_benign)} -> {MAX_BENIGN_RECORDS})...")
-        df_benign = df_benign.sample(n=MAX_BENIGN_RECORDS, random_state=42)
-        
-    # Downsample Malicious (if way too huge)
-    if len(df_malicious) > MAX_MALICIOUS_RECORDS:
-        print(f"    Capping Malicious traffic ({len(df_malicious)} -> {MAX_MALICIOUS_RECORDS})...")
-        df_malicious = df_malicious.sample(n=MAX_MALICIOUS_RECORDS, random_state=42)
-        
-    # Recombine for training
-    train_df = pd.concat([df_benign, df_malicious], ignore_index=True)
-    print(f"    Final Training Set Size: {len(train_df)}")
-    print(f"    Final Class Distribution: {train_df['label'].value_counts().to_dict()}")
-    
-    # Free memory
-    del df_benign
-    del df_malicious
-    gc.collect()
-    # ----------------------------------------
+    train_df = full_data
+
+    # --- Runtime Memory Safety Check ---
+    if len(train_df) > 5000000:
+        print(f"\n[!] WARNING: Dataset size is {len(train_df)} records.")
+        print("    Training Random Forest on >5M records may crash RAM (OOM Killed).")
+        try:
+            decision = input("    Do you want to auto-downsample to 5M records to be safe? (y/n): ").lower().strip()
+            if decision == 'y':
+                print("    [+] Downsampling to 5M records...")
+                train_df = train_df.sample(n=5000000, random_state=42)
+                print(f"    New Training Size: {len(train_df)}")
+                gc.collect()
+            else:
+                print("    [!] Proceeding with full dataset. Good luck!")
+        except: pass
 
     print("\n[+] Training Random Forest Classifier...")
     
@@ -207,11 +195,13 @@ if __name__ == "__main__":
     preprocessor = ColumnTransformer(
         transformers=[
             ('num', StandardScaler(), numeric_features),
-            ('text', TfidfVectorizer(max_features=5000), text_features)
+            # REDUCED max_features from 5000 to 1000 to save RAM
+            ('text', TfidfVectorizer(max_features=1000), text_features)
         ], remainder='passthrough')
     
+    # REDUCED n_jobs from -1 to 2 to prevent thread memory overhead
     classifier = Pipeline(steps=[('preprocessor', preprocessor),
-                                 ('clf', RandomForestClassifier(n_jobs=-1, random_state=42))])
+                                 ('clf', RandomForestClassifier(n_jobs=2, random_state=42))])
     
     X = train_df[numeric_features + [text_features]]
     y = train_df['label']
@@ -233,18 +223,21 @@ if __name__ == "__main__":
     joblib.dump(classifier, 'random_forest_pipeline.joblib')
 
     print("\n[+] Training Isolation Forest Anomaly Detector...")
-    # Train ONLY on benign data (from the downsampled set is fine)
+    # Train ONLY on benign data
     benign_training_data = train_df[train_df['label'] == 0]
     
     if not benign_training_data.empty:
-        # Isolation Forest is computationally expensive, keep it small
-        if len(benign_training_data) > 200000:
-             benign_training_data = benign_training_data.sample(n=200000, random_state=42)
+        # Isolation Forest is extremely expensive. 
+        # Even if user refused downsampling earlier, we cap IF training data for sanity.
+        if len(benign_training_data) > 500000:
+             print(f"    [INFO] Sub-sampling benign data to 500k for Isolation Forest training speed...")
+             benign_training_data = benign_training_data.sample(n=500000, random_state=42)
 
         X_benign = benign_training_data[numeric_features + [text_features]]
         
+        # REDUCED n_jobs here as well
         anomaly_detector = Pipeline(steps=[('preprocessor', preprocessor),
-                                           ('clf', IsolationForest(n_jobs=-1, random_state=42, contamination='auto'))])
+                                           ('clf', IsolationForest(n_jobs=2, random_state=42, contamination='auto'))])
         
         anomaly_detector.fit(X_benign)
         joblib.dump(anomaly_detector, 'isolation_forest_pipeline.joblib')
