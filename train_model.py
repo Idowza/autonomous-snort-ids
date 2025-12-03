@@ -15,15 +15,23 @@ import joblib
 import gc
 
 # --- Configuration ---
+# Use absolute path to be safe
 DATASET_ROOT = os.path.abspath('datasets')
+
+# Limit total training size to prevent OOM crashes
+MAX_BENIGN_RECORDS = 500000
+MAX_MALICIOUS_RECORDS = 500000 
+
+# Default to 10% if not specified
 SAMPLE_RATE = 0.1 
 
 def get_user_sample_rate():
+    """ Asks the user for a sample rate. """
     global SAMPLE_RATE
     print(f"\n--- Configuration ---")
-    print(f"Current default sample rate is {SAMPLE_RATE * 100}%.")
+    print(f"Current default loading sample rate is {SAMPLE_RATE * 100}%.")
     try:
-        user_input = input("Enter desired sample rate (0.01 to 1.0) or press Enter to keep default: ").strip()
+        user_input = input("Enter desired loading sample rate (0.01 to 1.0) or press Enter to keep default: ").strip()
         if user_input:
             rate = float(user_input)
             if 0.0 < rate <= 1.0:
@@ -37,11 +45,12 @@ def get_user_sample_rate():
         print("Invalid input. Using default.")
 
 def engineer_features(df):
+    """ Standardizes and engineers features. """
     df['message'] = df['message'].astype(str).fillna('Unknown')
     df['message_length'] = df['message'].str.len()
     special_chars = r'[\$\{\}\(\)\'\/]'
     df['special_char_count'] = df['message'].str.count(special_chars)
-    keywords = ['select', 'union', 'script', 'jndi', 'ldap', 'payload', 'attack', 'exploit', 'scan', 'ddos', 'flood', 'spoof']
+    keywords = ['select', 'union', 'script', 'jndi', 'ldap', 'payload', 'attack', 'exploit', 'scan']
     keyword_pattern = '|'.join(keywords)
     df['keyword_count'] = df['message'].str.lower().str.count(keyword_pattern)
     df['dest_port'] = pd.to_numeric(df['dest_port'], errors='coerce').fillna(0).astype(int)
@@ -56,7 +65,7 @@ def find_column(df, candidates):
             return cols_map[cand_norm]
     return None
 
-# --- Universal Loader Logic ---
+# --- Loaders ---
 
 def load_and_process_generic(folder_path, dataset_name="Unknown Dataset"):
     print(f"\n[+] Processing {dataset_name} from {folder_path}...")
@@ -69,21 +78,17 @@ def load_and_process_generic(folder_path, dataset_name="Unknown Dataset"):
 
     for f in files:
         try:
-            # 1. Peek at headers
             try:
                 header = pd.read_csv(f, nrows=0, encoding='latin1')
             except:
-                # Fallback for UNSW raw files without headers
-                print(f"    [INFO] {os.path.basename(f)} read error. Assuming raw UNSW format.")
+                # Fallback for UNSW raw files
                 unsw_cols = ['srcip', 'sport', 'dstip', 'dsport', 'proto', 'state', 'dur', 'sbytes', 'dbytes', 'sttl', 'dttl', 'sloss', 'dloss', 'service', 'Sload', 'Dload', 'Spkts', 'Dpkts', 'swin', 'dwin', 'stcpb', 'dtcpb', 'smeansz', 'dmeansz', 'trans_depth', 'res_bdy_len', 'Sjit', 'Djit', 'Stime', 'Ltime', 'Sintpkt', 'Dintpkt', 'tcprtt', 'synack', 'ackdat', 'is_sm_ips_ports', 'ct_state_ttl', 'ct_flw_http_mthd', 'is_ftp_login', 'ct_ftp_cmd', 'ct_srv_src', 'ct_srv_dst', 'ct_dst_ltm', 'ct_src_ ltm', 'ct_src_dport_ltm', 'ct_dst_sport_ltm', 'ct_dst_src_ltm', 'attack_cat', 'Label']
                 df = pd.read_csv(f, header=None, names=unsw_cols, encoding='latin1', low_memory=False)
-                # For raw UNSW, we know the cols
                 port_col = 'dsport'
                 label_col = 'Label'
                 msg_col = 'attack_cat'
             else:
-                # Standard CSV with headers
-                port_col = find_column(header, ['Destination Port', 'Dst Port', 'dest_port', 'dsport', 'dp'])
+                port_col = find_column(header, ['Destination Port', 'Dst Port', 'dest_port', 'dsport', 'dp', 'Destination_Port'])
                 label_col = find_column(header, ['Label', 'label', 'class', 'attack_cat'])
                 
                 if not port_col or not label_col:
@@ -91,23 +96,17 @@ def load_and_process_generic(folder_path, dataset_name="Unknown Dataset"):
                     continue
 
                 df = pd.read_csv(f, usecols=[port_col, label_col], encoding='latin1', low_memory=False)
-                msg_col = label_col # Default message to label if no specifics
 
-            # 2. Sampling
             if len(df) > 50000:
                 df = df.sample(frac=SAMPLE_RATE, random_state=42)
 
-            # 3. Normalization
             df.rename(columns={port_col: 'dest_port', label_col: 'raw_label'}, inplace=True)
             
-            # Logic to create a descriptive message column
-            # If we have a specific attack category column, use it. Otherwise use raw label.
             if 'attack_cat' in df.columns:
                  df['message'] = df['attack_cat'].fillna('Unknown Attack')
             else:
                  df['message'] = df['raw_label'].astype(str)
 
-            # Robust Labeling: 0 for benign, 1 for anything else
             df['label'] = df['raw_label'].astype(str).apply(
                 lambda x: 0 if any(benign in x.lower().strip() for benign in ['benign', 'normal', '0']) else 1
             )
@@ -142,13 +141,10 @@ if __name__ == "__main__":
     data_frames.append(load_local_snort())
     gc.collect()
     
-    # List of all datasets to process
-    # Format: (Subfolder Name, Display Name)
     datasets_to_load = [
         ('cicids2017', 'CIC-IDS-2017'),
         ('cicids2018', 'CSE-CIC-IDS2018'),
         ('unsw_nb15', 'UNSW-NB15 (Original)'),
-        ('unsw_nb15_augmented', 'CIC-UNSW-NB15 Augmented'),
         ('cic_iov_2024', 'CIC-IoV-2024'),
         ('cic_ddos_2019', 'CIC-DDoS-2019'),
         ('cicev_2023', 'CICEV2023')
@@ -169,7 +165,39 @@ if __name__ == "__main__":
         exit()
 
     print(f"\n[+] Total Processed Records: {len(full_data)}")
-    print(f"    Class Distribution: {full_data['label'].value_counts().to_dict()}")
+    print(f"    Raw Class Distribution: {full_data['label'].value_counts().to_dict()}")
+
+    # --- SMART DOWNSAMPLING (Prevent OOM) ---
+    print("\n[-] Applying Smart Downsampling to prevent memory crash...")
+    
+    # Split by class
+    df_benign = full_data[full_data['label'] == 0]
+    df_malicious = full_data[full_data['label'] == 1]
+    
+    # Clear full_data to free memory immediately
+    del full_data
+    gc.collect()
+    
+    # Downsample Benign (Majority Class)
+    if len(df_benign) > MAX_BENIGN_RECORDS:
+        print(f"    Capping Benign traffic ({len(df_benign)} -> {MAX_BENIGN_RECORDS})...")
+        df_benign = df_benign.sample(n=MAX_BENIGN_RECORDS, random_state=42)
+        
+    # Downsample Malicious (if way too huge)
+    if len(df_malicious) > MAX_MALICIOUS_RECORDS:
+        print(f"    Capping Malicious traffic ({len(df_malicious)} -> {MAX_MALICIOUS_RECORDS})...")
+        df_malicious = df_malicious.sample(n=MAX_MALICIOUS_RECORDS, random_state=42)
+        
+    # Recombine for training
+    train_df = pd.concat([df_benign, df_malicious], ignore_index=True)
+    print(f"    Final Training Set Size: {len(train_df)}")
+    print(f"    Final Class Distribution: {train_df['label'].value_counts().to_dict()}")
+    
+    # Free memory
+    del df_benign
+    del df_malicious
+    gc.collect()
+    # ----------------------------------------
 
     print("\n[+] Training Random Forest Classifier...")
     
@@ -185,8 +213,8 @@ if __name__ == "__main__":
     classifier = Pipeline(steps=[('preprocessor', preprocessor),
                                  ('clf', RandomForestClassifier(n_jobs=-1, random_state=42))])
     
-    X = full_data[numeric_features + [text_features]]
-    y = full_data['label']
+    X = train_df[numeric_features + [text_features]]
+    y = train_df['label']
     
     try:
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y, random_state=42)
@@ -205,15 +233,15 @@ if __name__ == "__main__":
     joblib.dump(classifier, 'random_forest_pipeline.joblib')
 
     print("\n[+] Training Isolation Forest Anomaly Detector...")
-    benign_data = full_data[full_data['label'] == 0]
+    # Train ONLY on benign data (from the downsampled set is fine)
+    benign_training_data = train_df[train_df['label'] == 0]
     
-    if not benign_data.empty:
-        if len(benign_data) > 100000:
-            benign_sample = benign_data.sample(n=100000, random_state=42)
-        else:
-            benign_sample = benign_data
-            
-        X_benign = benign_sample[numeric_features + [text_features]]
+    if not benign_training_data.empty:
+        # Isolation Forest is computationally expensive, keep it small
+        if len(benign_training_data) > 200000:
+             benign_training_data = benign_training_data.sample(n=200000, random_state=42)
+
+        X_benign = benign_training_data[numeric_features + [text_features]]
         
         anomaly_detector = Pipeline(steps=[('preprocessor', preprocessor),
                                            ('clf', IsolationForest(n_jobs=-1, random_state=42, contamination='auto'))])
