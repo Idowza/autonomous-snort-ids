@@ -7,11 +7,22 @@ import time
 import random
 import sys
 import os
+import string
+import ipaddress
 
 # --- Configuration ---
-INTERFACE = "eth0"  # The interface to sniff on
+INTERFACE = "enp5s0"
 MODEL_NAME = 'llama3.1:8b'
 SUGGESTED_RULES_FILE = 'suggested_rules.txt'
+
+# 1. Define the Subnet to Ignore (Local LAN)
+LOCAL_SUBNET = ipaddress.ip_network('192.168.1.0/24')
+
+# 2. Define the Exception (Allow this specific IP from the ignored subnet)
+ALLOWED_KALI_IP = '192.168.1.44'
+
+# Ignore traffic TO these ports (Management)
+IGNORED_PORTS = [22, 514]
 
 # Load Models
 try:
@@ -22,62 +33,76 @@ except Exception as e:
     print(f"[!] Error loading models: {e}")
     sys.exit(1)
 
+def is_printable(s):
+    if not s: return False
+    return all(c in string.printable for c in s)
+
 def extract_features_from_packet(packet):
-    """
-    Extracts the exact features your model expects from a raw Scapy packet.
-    """
     if not packet.haslayer(scapy.IP):
         return None
 
-    # Extract raw fields
     src_ip = packet[scapy.IP].src
-    dst_ip = packet[scapy.IP].dst
     
+    # --- FILTER LOGIC ---
+    # If the packet is from our local subnet...
+    if ipaddress.ip_address(src_ip) in LOCAL_SUBNET:
+        # ...AND it is NOT our Kali machine...
+        if src_ip != ALLOWED_KALI_IP:
+            # ...then ignore it.
+            return None
+    # Otherwise (it's Kali OR it's from the Internet), proceed.
+    # --------------------
+
+    dest_port = 0
+    protocol = 'other'
+    payload_data = ""
+
     if packet.haslayer(scapy.TCP):
         dest_port = packet[scapy.TCP].dport
         protocol = 'tcp'
-        # Try to get payload
-        try:
-            payload = str(packet[scapy.TCP].payload)
-        except:
-            payload = ""
     elif packet.haslayer(scapy.UDP):
         dest_port = packet[scapy.UDP].dport
         protocol = 'udp'
-        try:
-            payload = str(packet[scapy.UDP].payload)
-        except:
-            payload = ""
     else:
-        return None # Skip non-TCP/UDP for now
+        return None 
 
-    # Engineer Features (Must match training EXACTLY)
-    # Note: 'message' usually comes from Snort. Here we use the payload as the 'message'
-    # to detect anomalies in the content itself.
-    message = payload 
+    if dest_port in IGNORED_PORTS:
+        return None
+
+    # Payload Extraction
+    if packet.haslayer(scapy.Raw):
+        raw_bytes = packet[scapy.Raw].load
+        try:
+            payload_data = raw_bytes.decode('utf-8')
+        except:
+            return None 
     
+    if len(payload_data) < 5: return None
+    if not is_printable(payload_data): return None
+
+    # Feature Engineering
     df = pd.DataFrame([{
-        'message': message,
+        'message': payload_data,
         'dest_port': int(dest_port)
     }])
     
-    df['message_length'] = len(message)
+    df['message_length'] = len(payload_data)
     special_chars = r'[\$\{\}\(\)\'\/]'
     df['special_char_count'] = df['message'].str.count(special_chars)
     keywords = ['select', 'union', 'script', 'jndi', 'ldap', 'payload', 'attack', 'exploit', 'scan']
     keyword_pattern = '|'.join(keywords)
     df['keyword_count'] = df['message'].str.lower().str.count(keyword_pattern)
     
-    # Return features AND metadata for rule generation
     features = df[['dest_port', 'message_length', 'special_char_count', 'keyword_count', 'message']]
-    metadata = {'src_ip': src_ip, 'dest_port': dest_port, 'message': message, 'protocol': protocol}
+    metadata = {'src_ip': src_ip, 'dest_port': dest_port, 'message': payload_data, 'protocol': protocol}
     
     return features, metadata
 
 def generate_rule(meta):
-    """Generates a Snort rule using Ollama."""
     print(f"    [!] AI Generating Rule for {meta['src_ip']} -> Port {meta['dest_port']}...")
     
+    safe_payload = meta['message'][:100].replace('"', '\\"')
+
     prompt = f"""
     Write a strict Snort 3 rule to block this malicious packet.
     
@@ -85,87 +110,61 @@ def generate_rule(meta):
     - Source: {meta['src_ip']}
     - Dest Port: {meta['dest_port']}
     - Protocol: {meta['protocol']}
-    - Payload Content: "{meta['message'][:100]}"
+    - Payload Content: "{safe_payload}"
     
     REQUIREMENTS:
     1. Format: alert {meta['protocol']} any any -> $HOME_NET {meta['dest_port']}
-    2. Metadata: flow:to_server,established; classtype:attempted-admin; sid:1000005; rev:1;
-    3. Content: Match the payload content if it looks unique.
+    2. Metadata: flow:to_server,established; classtype:attempted-admin; sid:<GENERATE_SID>; rev:1;
+    3. Content: Match the payload content ONLY if it looks like a text-based attack.
     4. OUTPUT ONLY THE RULE.
     """
     
     try:
         response = ollama.chat(model=MODEL_NAME, messages=[{'role': 'user', 'content': prompt}])
         rule = response['message']['content']
-        # Basic cleanup
         rule = rule.replace('```', '').replace('snort', '').strip()
+        
+        new_sid = int(time.time()) + random.randint(1, 1000)
+        if "sid:" in rule:
+            rule = re.sub(r'sid:[^;]+;', f'sid:{new_sid};', rule)
+        else:
+            rule = rule.replace(')', f'; sid:{new_sid}; rev:1;)')
+            
         return rule
     except:
         return None
 
 def is_duplicate_rule(new_rule_text):
-    """Checks if a rule with the same core logic already exists."""
-    if not os.path.exists(SUGGESTED_RULES_FILE):
-        return False
+    if not os.path.exists(SUGGESTED_RULES_FILE): return False
     try:
         with open(SUGGESTED_RULES_FILE, 'r') as f:
             existing_content = f.read()
-        
-        # Check if the exact rule string exists
-        if new_rule_text.strip() in existing_content:
-            return True
-            
-        # Check if a rule with the same message already exists
-        # This prevents flooding with identical rules for the same attack type
-        msg_match = re.search(r'msg:"([^"]+)"', new_rule_text)
-        if msg_match:
-            msg_content = msg_match.group(1)
-            if msg_content in existing_content:
-                return True
-                
+        if new_rule_text.strip() in existing_content: return True
         return False
-    except Exception:
-        return False
+    except: return False
 
 def packet_callback(packet):
-    """Called for every single packet sniffed."""
     result = extract_features_from_packet(packet)
-    if not result:
-        return
+    if not result: return
 
     features, meta = result
     
-    # 1. AI Prediction
     try:
-        # Is it known malicious?
         is_malicious = (classifier.predict(features)[0] == 1)
-        # Is it an anomaly?
-        is_anomaly = (anomaly_detector.predict(features)[0] == -1)
         
-        if is_malicious or is_anomaly:
-            reason = "KNOWN ATTACK" if is_malicious else "ZERO-DAY ANOMALY"
-            print(f"\n[ALARM] {reason} detected from {meta['src_ip']}")
+        if is_malicious:
+            print(f"\n[ALARM] MALICIOUS PACKET from {meta['src_ip']}")
             print(f"        Payload: {meta['message'][:50]}...")
             
-            # 2. Generate Rule
             rule = generate_rule(meta)
-            if rule:
-                # 3. Check for duplicates before writing
-                if not is_duplicate_rule(rule):
-                    print(f"        Proposed Rule: {rule}")
-                    with open(SUGGESTED_RULES_FILE, "a") as f:
-                        f.write(f"# Auto-generated for {reason}\n{rule}\n\n")
-                else:
-                    print(f"        [i] Duplicate rule suppressed.")
-                    
-    except Exception as e:
-        pass # Keep sniffing even if one packet fails
+            if rule and not is_duplicate_rule(rule):
+                print(f"        Proposed Rule: {rule}")
+                with open(SUGGESTED_RULES_FILE, "a") as f:
+                    f.write(f"# Auto-generated for Malicious Packet\n{rule}\n\n")
+    except Exception: pass
 
-# --- Main Execution ---
 if __name__ == "__main__":
     print(f"--- AI Packet Inspector Active on {INTERFACE} ---")
-    print("Analyzing ALL traffic in real-time...")
-    
-    # Start Sniffing
-    # store=0 prevents memory buildup
+    print(f"--- Ignoring Local Subnet {LOCAL_SUBNET} EXCEPT {ALLOWED_KALI_IP} ---")
+    print("Analyzing traffic...")
     scapy.sniff(iface=INTERFACE, prn=packet_callback, store=0)
