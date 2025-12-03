@@ -101,37 +101,72 @@ def extract_features_from_packet(packet):
 def generate_rule(meta):
     print(f"    [!] AI Generating Rule for {meta['src_ip']} -> Port {meta['dest_port']}...")
     
-    safe_payload = meta['message'][:100].replace('"', '\\"')
+    # Escape quotes to prevent JSON errors in prompt
+    safe_payload = meta['message'][:100].replace('"', '\\"').replace('\n', ' ')
 
     prompt = f"""
-    Write a strict Snort 3 rule to block this malicious packet.
+    Write a valid Snort 3 rule to detect this specific payload.
     
-    DETAILS:
-    - Source: {meta['src_ip']}
-    - Dest Port: {meta['dest_port']}
+    ATTACK DETAILS:
     - Protocol: {meta['protocol']}
-    - Payload Content: "{safe_payload}"
+    - Dest Port: {meta['dest_port']}
+    - Payload: "{safe_payload}"
     
-    REQUIREMENTS:
-    1. Format: alert {meta['protocol']} any any -> $HOME_NET {meta['dest_port']}
-    2. Metadata: flow:to_server,established; classtype:attempted-admin; sid:<GENERATE_SID>; rev:1;
-    3. Content: Match the payload content ONLY if it looks like a text-based attack.
-    4. OUTPUT ONLY THE RULE.
+    CRITICAL SYNTAX RULES:
+    1. Start with: alert {meta['protocol']} any any -> $HOME_NET {meta['dest_port']}
+    2. OPEN parentheses "(" immediately after the port.
+    3. Put ALL content matches, msg, and metadata INSIDE the parentheses.
+    4. CLOSE parentheses ")" ONLY at the very end.
+    5. Do NOT include explanations. Output the rule ONLY.
+    
+    Example format:
+    alert tcp any any -> $HOME_NET 80 (msg:"Malicious Payload"; content:"union select"; sid:1000005; rev:1;)
     """
     
     try:
         response = ollama.chat(model=MODEL_NAME, messages=[{'role': 'user', 'content': prompt}])
-        rule = response['message']['content']
-        rule = rule.replace('```', '').replace('snort', '').strip()
+        raw_output = response['message']['content']
         
-        new_sid = int(time.time()) + random.randint(1, 1000)
-        if "sid:" in rule:
-            rule = re.sub(r'sid:[^;]+;', f'sid:{new_sid};', rule)
+        # --- STRICT CLEANUP LOGIC ---
+        # 1. Flatten lines
+        flat_rule = raw_output.replace('\n', ' ').replace('\r', '')
+
+        # 2. Regex Extraction: GREEDY MATCH
+        # Using .* instead of .*? ensures we capture up to the LAST closing parenthesis.
+        # This fixes the bug where rules with "(parentheses inside content)" were getting cut off.
+        match = re.search(r'(alert\s+.*\))', flat_rule)
+        
+        if match:
+            rule = match.group(1)
+            
+            # 3. AUTO-FIX: Ensure it ends with ";)"
+            if rule.endswith(')') and not rule.endswith(';)'):
+                rule = rule[:-1] + ';)'
+            
+            # 4. SAFETY CHECK: Quote Balancing
+            # If the rule has an odd number of quotes, the syntax is definitely broken.
+            if rule.count('"') % 2 != 0:
+                print(f"    [!] Discarding malformed rule (Unbalanced quotes).")
+                return None
+
         else:
-            rule = rule.replace(')', f'; sid:{new_sid}; rev:1;)')
+            print(f"    [!] AI output did not match Snort syntax.")
+            # print(f"    [DEBUG RAW OUTPUT]: {raw_output[:200]}...") 
+            return None
+        
+        # 5. Generate unique SID
+        new_sid = int(time.time()) + random.randint(1, 1000)
+        
+        # 6. Inject SID if missing
+        if "sid:" not in rule:
+            # Insert before the last closing parenthesis
+            rule = rule.rsplit(')', 1)[0] + f'; sid:{new_sid}; rev:1;)'
+        else:
+            rule = re.sub(r'sid:\s*\d+;', f'sid:{new_sid};', rule)
             
         return rule
-    except:
+    except Exception as e:
+        print(f"Error generating rule: {e}")
         return None
 
 def is_duplicate_rule(new_rule_text):

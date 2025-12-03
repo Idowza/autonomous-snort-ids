@@ -1,8 +1,8 @@
 import subprocess
 import getpass
 import os
-import shlex
 import sys
+import re
 
 # --- Configuration ---
 KALI_USER = "kali"  # Replace with your actual username
@@ -49,11 +49,7 @@ def reload_snort_rules(password=None):
     """Robustly attempts to reload Snort rules."""
     print("\nAttempting to reload Snort rules on Kali...")
 
-    # Method 1: Systemd (Best if running as service)
-    # cmd = "sudo systemctl reload snort"
-    
-    # Method 2: Signal via PID (Best for manual run)
-    # We use 'pidof' to find the PID of the snort process
+    # Method 1: Signal via PID (Best for manual run)
     cmd = "sudo kill -HUP $(pidof snort)"
     
     success, output = run_remote_command(cmd, password)
@@ -63,40 +59,64 @@ def reload_snort_rules(password=None):
         return True
     else:
         print(f"  [FAIL] Could not reload Snort. Reason: {output}")
-        # Fallback: Try pkill just in case pidof failed
+        # Fallback: Try pkill
         print("  [INFO] Trying fallback method (pkill)...")
         success, output = run_remote_command("sudo pkill -HUP -f snort", password)
         if success:
              print("  [OK] Fallback reload successful.")
              return True
-        
         return False
 
 # --- Rule Parsing Logic ---
 def parse_rules_from_file(filepath):
+    """
+    Reads the suggested rules file.
+    Sanitizes rules by flattening multiline strings into single-line Snort rules.
+    Robustly handles AI hallucinations (prefixes like 'bash', suffixes like explanations).
+    """
     rules = []
-    current_desc = ""
-    current_block = []
     
     if not os.path.exists(filepath): return []
 
     with open(filepath, 'r') as f:
-        for line in f:
-            line = line.strip()
-            if not line: continue
-            
-            if line.startswith("# Rule for"):
-                if current_block:
-                    rules.append({'desc': current_desc, 'rule': "\n".join(current_block)})
-                    current_block = []
-                current_desc = line
-            elif line.startswith(('alert', 'log', 'pass', 'drop', 'reject')):
-                current_block.append(line)
-            elif current_block and line.endswith(';)'): # Handle multiline
-                current_block.append(line)
+        content = f.read()
 
-        if current_block:
-            rules.append({'desc': current_desc, 'rule': "\n".join(current_block)})
+    # Split by the header comments we know we write
+    # Regex splits by "# Auto-generated..." blocks
+    raw_blocks = re.split(r'(# Auto-generated for Malicious Packet)', content)
+    
+    # Iterate and reconstruct
+    for i in range(1, len(raw_blocks), 2):
+        desc = raw_blocks[i].strip() # The header
+        body = raw_blocks[i+1].strip() # The rule content (possibly multiline)
+        
+        if not body: continue
+
+        # --- SANITIZATION ---
+        # 1. Replace newlines with spaces to flatten the rule
+        flat_rule = body.replace('\n', ' ').replace('\r', '')
+        
+        # 2. Remove multiple spaces
+        flat_rule = re.sub(' +', ' ', flat_rule)
+        
+        # 3. Find start of valid rule (strips "bash", "shell", "```", etc.)
+        valid_actions = ['alert', 'log', 'drop', 'reject', 'pass']
+        match = re.search(r'\b(' + '|'.join(valid_actions) + r')\b', flat_rule)
+        
+        if match:
+            # Cut everything before the valid keyword
+            flat_rule = flat_rule[match.start():]
+        else:
+            continue # Skip if no valid action found
+
+        # 4. Strip trailing explanations (anything after the last closing parenthesis/semicolon)
+        # We look for the standard Snort suffix ");"
+        last_paren_idx = flat_rule.rfind(');')
+        if last_paren_idx != -1:
+            flat_rule = flat_rule[:last_paren_idx+2]
+
+        rules.append({'desc': desc, 'rule': flat_rule})
+
     return rules
 
 # --- Main Logic ---
@@ -121,7 +141,7 @@ if __name__ == "__main__":
         choice = input("Approve and Deploy? (y/n): ").lower().strip()
         
         if choice == 'y':
-            # 1. Write temp file
+            # 1. Write temp file (Sanitized)
             temp_local = f"temp_rule_{i}.txt"
             with open(temp_local, 'w') as f: f.write(item['rule'] + "\n")
             
