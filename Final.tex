@@ -1,0 +1,369 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{url}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{multirow}
+
+% --- FIXED CODE BLOCK FORMATTING ---
+\lstset{
+  basicstyle=\ttfamily\scriptsize, % Smaller font to fit columns
+  breaklines=true,                 % Wrap long lines automatically
+  postbreak=\mbox{\textcolor{red}{$\hookrightarrow$}\space}, % Arrow indicates wrapped line
+  frame=single,                    % Box around code
+  framesep=5pt,                    % Padding inside the box
+  rulecolor=\color{black},         % Box color
+  columns=fullflexible,            % Better text alignment
+  keepspaces=true,                 % Keep indentation
+  showstringspaces=false,          % Don't show underscores for spaces
+  captionpos=b,                    % Caption at bottom
+  tabsize=2                        % Smaller tab size
+}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+\begin{document}
+
+\title{Building an AI-Enhanced Autonomous Intrusion Detection System with Snort\\
+\thanks{This report represents the culmination of the EECS 994 Capstone Project.}
+}
+
+\author{\IEEEauthorblockN{Steven R. Iden}
+\IEEEauthorblockA{\textit{EECS 994} \\
+\textit{University of North Dakota}\\
+Grand Forks, ND \\
+steven.iden@und.edu}
+}
+
+\maketitle
+
+\begin{abstract}
+This report details the complete design, implementation, and evaluation of an AI-Enhanced Autonomous Intrusion Detection System (IDS). As cyber threats evolve in complexity and volume, traditional signature-based IDS solutions, such as Snort, face diminishing returns. While effective against known threats, they are inherently blind to zero-day exploits and require significant manual intervention to update rule sets. This project addresses these limitations by integrating a physical Snort 3 sensor with a hybrid machine learning pipeline. The system architecture utilizes a \textbf{Random Forest classifier} for precise categorization of known attack signatures and an \textbf{Isolation Forest} for unsupervised anomaly detection, trained on a massive composite dataset of over 6.5 million network flows. 
+
+Crucially, the system incorporates a novel autonomous feedback loop engineered using a local Large Language Model (Llama 3) to analyze raw packet payloads, generate valid Snort 3 signatures in real-time, and deploy them to the sensor. Experimental results demonstrate the system's ability to detect novel SQL injection and HTTP exploits, automatically generate effective blocking rules, and validate them via a self-testing mechanism, achieving the goal of a self-healing network defense system. All scripts, datasets, and documentation are available in the project repository at \url{https://github.com/Idowza/autonomous-snort-ids}.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Intrusion Detection System (IDS), Snort 3, Machine Learning, Large Language Models, Hybrid AI, Autonomous Security, Scapy, Random Forest, Isolation Forest.
+\end{IEEEkeywords}
+
+\section{Introduction}
+
+The rapid evolution of cyber threats has outpaced the capabilities of traditional signature-based Intrusion Detection Systems (IDS). Industry standards like Snort and Suricata rely on static signatures (rules) to identify malicious traffic. While highly effective at blocking known attacks, this reactive approach creates a critical window of vulnerability known as the ``zero-day'' gap. Between the disclosure of a new vulnerability and the deployment of a corresponding signature, networks remain defenseless.
+
+Furthermore, the volume of modern network traffic makes manual rule generation unsustainable. Security Operations Center (SOC) analysts are often overwhelmed by false positives and the sheer velocity of alert data. This necessitates a shift towards autonomous systems capable of self-defense.
+
+The overall goal of this semester-long project was to design and build a hybrid intrusion detection system that integrates a traditional rule-based engine with a machine learning model for enhanced classification and autonomous response. This report documents the complete work done throughout the semester, covering three distinct phases:
+\begin{enumerate}
+    \item \textbf{Phase 1}: Deployment and validation of a custom rule-based system on physical hardware.
+    \item \textbf{Phase 2}: Development of a hybrid machine learning pipeline for alert classification using massive public datasets.
+    \item \textbf{Phase 3}: Implementation of an autonomous AI feedback loop using Large Language Models (LLMs) to write and validate rules.
+\end{enumerate}
+
+\section{Literature Review}
+
+The integration of Machine Learning (ML) with IDS is an active area of research driven by the limitations of static detection engines.
+
+\subsection{Machine Learning in Intrusion Detection}
+Shah and Issac [2] demonstrated that machine learning could significantly reduce the false positive rates inherent in rule-based systems. Their work highlighted the limitations of Snort's static engine and proposed adaptive plugins as a solution. However, they noted that supervised learning models often struggle to generalize to new attack types.
+
+Building on this, Preethi et al. [1] proposed a workflow involving the capture of traffic via Snort, conversion to CSV, and classification via Random Forest. Their experiments yielded a 99.30\% accuracy rate, establishing Random Forest as a baseline algorithm for this project. Their workflow directly influenced the data pipeline design in Phase 2, specifically the method of parsing Snort logs into structured features.
+
+\subsection{Hybrid Detection Architectures}
+To address the zero-day limitation of supervised classifiers, recent literature suggests hybrid approaches. Aslam et al. [3] proposed an ``OR-gate logic'' where decisions from a rule-based engine and an ML classifier are combined. This project adopts and extends this architecture by adding a third layer: unsupervised anomaly detection (Isolation Forest), creating a tri-modal detection system (Signatures + Classification + Anomaly).
+
+\subsection{Autonomous Response and LLMs}
+The concept of autonomous response has evolved from simple script-based blocking to intelligent decision-making. Murgai et al. [4] introduced a human-in-the-loop feedback mechanism, where expert review refines the model. This project implements this concept via the \texttt{approve\_rules.py} module.
+
+Most recently, the emergence of Large Language Models (LLMs) has opened new avenues for automated response. Lian et al. [7] introduced ``RuleMaster+'', a framework demonstrating that fine-tuned LLMs can generate effective IDS rules. This project extends these concepts by implementing them on physical hardware and closing the loop with automated validation, moving beyond theoretical simulation to a functional prototype.
+
+\section{System Architecture}
+
+A robust, isolated environment was created to allow for safe and repeatable testing of the IDS and attack scenarios. While initial prototypes utilized virtualization (KVM), the final architecture was deployed on bare-metal hardware to ensure accurate line-speed packet capture and eliminate hypervisor networking artifacts such as checksum offloading errors.
+
+\subsection{Physical Infrastructure}
+The lab environment consists of three distinct nodes:
+\begin{itemize}
+    \item \textbf{Snort IDS Sensor}: A dedicated Kali Linux machine (IP: 192.168.1.44) serving as the primary network sensor. It runs Snort 3 configured with a custom \texttt{snort.lua} file and manages the \texttt{local.rules} file. It is positioned to inspect all east-west traffic in the test subnet.
+    \item \textbf{AI \& Analysis Node}: A high-performance Linux Mint machine (IP: 192.168.1.6). This node acts as the system's ``brain,'' hosting the Python AI pipeline, the Ollama LLM service, and the dataset storage. It receives logs from the sensor via Syslog (UDP 514) to minimize I/O latency on the sensor itself.
+    \item \textbf{Network Gateway}: An OPNsense firewall managing the local subnet (192.168.1.0/24) to ensure isolation from the production network and provide NAT services.
+\end{itemize}
+
+\subsection{Data Flow Pipeline}
+The system utilizes a custom forwarding pipeline designed for low latency. Snort 3 captures packets on the monitored interface. Alerts are generated based on the active configuration and forwarded immediately to the AI Node via a dedicated Syslog stream (UDP 514, facility \texttt{local5}). This design decouples disk I/O from packet processing, ensuring the sensor maintains line-speed performance.
+
+\subsection{Parallel Packet Inspection}
+On the AI Node, a Python-based \texttt{packet\_inspector.py} script utilizes \textbf{Scapy} to sniff raw packets in parallel. This parallel inspection architecture is critical; it allows the system to inspect payload contents for anomalies even if Snort does not trigger an alert, effectively acting as a secondary, ML-driven sensor. The inspector applies strict pre-filtering to minimize noise:
+\begin{itemize}
+    \item \textbf{Subnet Filtering}: Ignores traffic originating from the local 192.168.1.0/24 subnet, with the specific exception of the Kali sensor IP (192.168.1.44) to allow for internal testing.
+    \item \textbf{Port Exclusion}: Traffic destined for management ports (SSH/22) and the logging stream itself (Syslog/514) is discarded to prevent feedback loops.
+    \item \textbf{Payload Validation}: Only packets containing printable ASCII payloads of length $>5$ bytes are processed for feature extraction.
+\end{itemize}
+
+\section{Phase 1: Rule-Based Deployment}
+
+The primary objective of Phase 1 was to establish a functional, rule-based Network Intrusion Detection System (NIDS) using Snort 3.
+
+\subsection{Transition to Stateless Inspection}
+Initial testing in the virtualized environment revealed persistent issues with stateful TCP rule processing (using the \texttt{flow: established} keyword). Alerts were failing to trigger consistently during TCP handshakes. To fulfill the project requirements and ensure reliable detection during the initial phase, a strategic pivot was made to focus on stateless rules, which examine individual packets without regard for the stream table.
+
+\subsection{Custom Rule Development (Linguistic Analysis)}
+Five distinct custom rules were developed to detect specific attack vectors. Below is an explanation of these rules in a linguistic tone, describing the intent and logic behind each signature.
+
+\subsubsection{SSH Brute-Force Detection}
+\begin{lstlisting}
+alert tcp any any -> $HOME_NET 22 (msg: "SSH Brute-Force Attempt"; flow:to_server, established; content: "SSH-", nocase; detection_filter: track by_src, count 5, seconds 60; sid: 1000002; rev:1;)
+\end{lstlisting}
+\textbf{Linguistic Explanation}: ``This rule monitors connection attempts to our SSH port (port 22). It acts as a tripwire for aggressive login attempts. I want it to track every source IP address individually. If it observes the same IP attempting to initiate an SSH handshake five times within a single 60-second window, it must trigger an alert. This behavior is a clear signature of an automated brute-force tool like Hydra.''
+
+\subsubsection{Nmap FIN Scan Detection}
+\begin{lstlisting}
+alert tcp any any -> $HOME_NET any (msg: "Nmap FIN Scan Attempt"; flags: F,1; sid: 1000001; rev:1;)
+\end{lstlisting}
+\textbf{Linguistic Explanation}: ``This rule is designed to act as a silent alarm for stealthy reconnaissance. I want the system to inspect the TCP flags of every incoming packet. If it sees a packet where only the 'FIN' flag is set (and no others like SYN or ACK), it should immediately generate an alert. This is unnatural behavior in normal networking and is a specific fingerprint of an Nmap FIN scan used to map firewalls.''
+
+\subsubsection{ICMP Ping Sweep Detection}
+\begin{lstlisting}
+alert icmp any any -> $HOME_NET any (msg: "ICMP Ping Sweep Detected"; itype:8; icode:0; detection_filter: track by_src, count 2, seconds 10; sid: 1000004; rev:1;)
+\end{lstlisting}
+\textbf{Linguistic Explanation}: ``This rule identifies attackers who are performing initial network mapping. I want it to watch for ICMP Echo Requests (Type 8). While a single ping is normal, a rapid succession is suspicious. If the same source sends two or more pings within 10 seconds, it triggers the alert, indicating an automated sweep is in progress.''
+
+\subsubsection{SQL Injection Detection}
+\begin{lstlisting}
+alert udp any any -> $HOME_NET 3306 (content: "admin' UNION SELECT 1, database(), user()"; msg: "Possible SQL Injection"; metadata: former_category "Attempted Info Leak N-RPM"; sid:1764814600; rev:1;)
+\end{lstlisting}
+\textbf{Linguistic Explanation}: ``This rule looks for specific malicious payloads targeting database ports. I want the system to inspect the content of packets heading to port 3306 (MySQL). If the payload contains the exact string `admin' UNION SELECT', it is an unambiguous sign of an SQL injection attempt aiming to exfiltrate database structure and user details.''
+
+\subsubsection{Malicious Web Payload Detection}
+\begin{lstlisting}
+alert tcp any any -> $HOME_NET 80 (
+  content: "POST /upload.php HTTP/1.1\r\nHost: 192.168.1.6\r\nUser-Agent: curl/8.17.0\r\nAccept: */*\r\nContent-Length: "; 
+  msg: "Malicious Payload"; 
+  sid: 1764814496; rev:1;
+)
+\end{lstlisting}
+\textbf{Linguistic Explanation}: ``This rule identifies a specific, known exploit script targeting our web server. I want to match the exact HTTP header footprint of the attack tool. It looks for a POST request to `/upload.php` combined with a specific User-Agent string. This precise matching prevents false positives while blocking the known attack tool.''
+
+\section{Phase 2: Hybrid Machine Learning Pipeline}
+
+Phase 2 focused on addressing the limitations of static rules by developing a hybrid machine learning pipeline capable of classifying alerts and detecting anomalies.
+
+\subsection{Data Aggregation and Custom PCAPs}
+To train a robust model, a massive dataset was aggregated. While public datasets provided a baseline, it was critical to include local traffic patterns. Two custom PCAP files were recorded and integrated:
+\begin{itemize}
+    \item \texttt{2025-01-04-four-days-of-scans...pcap}: This capture contains four days of real-world noise, scanning activity, and web traffic hitting the exposed server.
+    \item \texttt{2025-06-20-traffic-from-running-the-malware.pcap}: This capture isolates the traffic patterns of the specific malware samples used for testing.
+\end{itemize}
+These PCAPs were processed through Snort 3 to generate log files, which were then parsed by the \texttt{parse\_logs.py} script.
+
+\subsection{Composite Dataset Construction}
+To prevent overfitting to the local environment, the training data was augmented with over 6.5 million records from four major academic datasets:
+\begin{enumerate}
+    \item \textbf{CIC-IDS-2017}: Included Web Attacks, Infiltration, and Port Scans.
+    \item \textbf{CSE-CIC-IDS2018}: Provided cloud-centric attack vectors and botnet traffic.
+    \item \textbf{UNSW-NB15}: Contributed complex exploit chains and fuzzers.
+    \item \textbf{CIC-DDoS-2019}: Added volumetric DDoS attack signatures.
+\end{enumerate}
+
+The final training set consisted of \textbf{6,536,534 records}, with a class distribution of 3,928,465 Malicious and 2,608,069 Benign flows.
+
+\subsection{Feature Engineering}
+Raw packet logs were transformed into numerical features using the \texttt{train\_model.py} script. Key engineered features included:
+\begin{itemize}
+    \item \texttt{message\_length}: The length of the payload string.
+    \item \texttt{special\_char\_count}: A regex-based count of characters often used in exploits (\texttt{[\$\{\}\(\)\'\/]}). This feature is particularly effective at identifying code injection attacks (e.g., Log4j, SQLi).
+    \item \texttt{keyword\_count}: A heuristic count of suspicious terms drawn from a predefined dictionary: \texttt{['select', 'union', 'script', 'jndi', 'ldap', 'payload', 'attack', 'exploit', 'scan']}.
+    \item \textbf{TF-IDF Vectorization}: The raw payload text was vectorized using Term Frequency-Inverse Document Frequency to highlight statistically significant words while filtering out common protocol noise.
+\end{itemize}
+
+\subsection{Data Loading and Normalization}
+Handling diverse datasets required robust normalization logic. The pipeline distinguishes between standard CSVs (CIC-IDS) and headerless formats (UNSW-NB15). For the latter, the script manually maps columns (e.g., \texttt{dsport}, \texttt{attack\_cat}) to the unified schema, ensuring that data from disparate sources can be trained within a single model.
+
+\subsection{Hybrid Model Architecture}
+A single classifier was deemed insufficient for zero-day threats. A \textbf{Hybrid Architecture} was implemented:
+\begin{enumerate}
+    \item \textbf{Random Forest Classifier}: A supervised ensemble method trained on the labeled dataset. It excels at categorizing known attack types with high precision.
+    \item \textbf{Isolation Forest}: An unsupervised anomaly detection algorithm trained exclusively on benign traffic. It isolates observations by randomly selecting a feature and split value. Anomalies are susceptible to isolation in fewer steps than normal points.
+\end{enumerate}
+
+The detection logic combines these outputs using a fail-safe OR gate:
+\begin{equation}
+Alert \iff (RF_{pred} == Malicious) \lor (IF_{pred} == -1)
+\end{equation}
+This ensures that even if the Classifier misses a novel attack (false negative), the Anomaly Detector captures it as a statistical outlier.
+
+\section{Phase 3: Autonomous AI and Feedback Loop}
+
+The final phase addressed the autonomous generation of defense rules, closing the security loop by integrating Generative AI.
+
+\subsection{Generative Model Selection}
+A critical component of the autonomous system is the Large Language Model (LLM) responsible for analyzing packet payloads. Several models were evaluated for their ability to generate syntactically correct Snort 3 rules and their inference speed on local hardware:
+\begin{itemize}
+    \item \texttt{ministral-3:14b}
+    \item \texttt{codellama: 7b}
+    \item \texttt{gemini-3-pro-preview}
+    \item \texttt{gpt-oss: 120b-cloud}
+    \item \texttt{llama3:latest}
+    \item \texttt{llama3.1:8b}
+\end{itemize}
+
+\textbf{Result}: \texttt{llama3.1:8b} yielded the best results. It consistently produced valid Snort syntax and was efficient enough for the local AI Node. \texttt{codellama} frequently hallucinated invalid rule options, while the cloud models introduced unacceptable latency.
+
+\subsection{Prompt Engineering and Sanitization}
+To prevent LLM hallucinations, a strict system prompt was engineered within \texttt{packet\_inspector.py}:
+
+\begin{lstlisting}[language=Python]
+prompt = f"""
+Write a valid Snort 3 rule to detect this specific payload.
+ATTACK DETAILS:
+- Protocol: {meta['protocol']}
+- Dest Port: {meta['dest_port']}
+- Payload: "{safe_payload}"
+
+CRITICAL SYNTAX RULES:
+1. Start with: alert {meta['protocol']} any any -> $HOME_NET {meta['dest_port']}
+2. OPEN parentheses "(" immediately after the port.
+3. Put ALL content matches, msg, and metadata INSIDE the parentheses.
+4. Do NOT include explanations. Output the rule ONLY.
+"""
+\end{lstlisting}
+
+Furthermore, the output is passed through a regex sanitizer in \texttt{approve\_rules.py}. This script flattens multiline output into a single valid Snort string and removes conversational filler (e.g., "Here is your rule:") using the pattern \texttt{r'(alert\textbackslash s+.*\textbackslash))'}. This ensures that only executable syntax is presented for validation.
+
+\subsection{Offline Rule Mining}
+In addition to real-time generation, an offline analysis module (\texttt{mine\_rules.py}) was developed to process historical alert logs. This script iterates through the aggregated CSV datasets, filtering for labeled malicious events that lack corresponding specific signatures. It utilizes a distinct prompt engineering strategy, instructing the LLM to act as a "Snort 3 Expert" and generate rules based on the \texttt{message} and \texttt{dest\_port} fields. This dual-approach allows the system to learn from past incidents (batch processing) while simultaneously reacting to active threats (stream processing).
+
+\subsection{The Validation Loop}
+The \texttt{validate\_attack.py} script orchestrates the self-healing capability with a precise verification mechanism:
+\begin{enumerate}
+    \item \textbf{Snapshot}: The script records the current file pointer position (in bytes) of \texttt{/var/log/snort\_alerts.log} using \texttt{f.tell()}.
+    \item \textbf{Replay}: It executes the specific attack payload (e.g., the exact SQL injection string) against the sensor using \texttt{subprocess.run} with a 15-second timeout to handle potential flooding.
+    \item \textbf{Verification}: It waits 5 seconds for network propagation and Syslog writing, then reads only the \textit{new} bytes from the log file.
+    \item \textbf{Confirmation}: It scans the new log data for the specific Snort ID (SID) generated by the LLM. If found, the rule is deemed effective.
+    \item \textbf{Deployment}: Validated rules are permanently appended to \texttt{local.rules} on the sensor via SSH/SCP.
+\end{enumerate}
+
+\section{Experimental Results}
+
+\subsection{Machine Learning Performance}
+The training process utilized the composite dataset of over 6.5 million records. Due to the high distinctiveness of the attack signatures in the public datasets versus background noise, the Random Forest classifier achieved exceptional metrics on the test set.
+
+\begin{table}[htbp]
+\caption{Random Forest Classification Report}
+\begin{center}
+\begin{tabular}{|l|c|c|c|c|}
+\hline
+\textbf{Class} & \textbf{Precision} & \textbf{Recall} & \textbf{F1-Score} & \textbf{Support} \\
+\hline
+Benign & 1.00 & 1.00 & 1.00 & 521,614 \\
+\hline
+Malicious & 1.00 & 1.00 & 1.00 & 785,693 \\
+\hline
+\textbf{Accuracy} & \multicolumn{3}{|c|}{1.00} & 1,307,307 \\
+\hline
+\end{tabular}
+\end{center}
+\end{table}
+
+The perfect scores suggest that the attack signatures in the dataset (e.g., volumetric DDoS flows) are statistically very distinct from the benign background traffic.
+
+\subsection{Autonomous Scenario Validation}
+The system's autonomy was validated through live fire exercises in the lab.
+
+\textbf{Scenario 1: SQL Injection}
+\begin{itemize}
+    \item \textbf{Attack Command}: \texttt{echo "admin' UNION SELECT 1, database(), user() --" | nc -u 192.168.1.6 3306}
+    \item \textbf{Detection}: Flagged by Hybrid Model as Malicious.
+    \item \textbf{Generated Rule}: \texttt{alert udp any any -> \$HOME\_NET 3306 (msg:"MySQL Admin Password Guess Attempt"; content:"admin' UNION SELECT 1, database(), user() -- "; sid:1764804710; rev:1;)}
+    \item \textbf{Outcome}: Validation successful. Snort alert generated on replay.
+\end{itemize}
+
+\textbf{Scenario 2: Malicious HTTP Payload}
+\begin{itemize}
+    \item \textbf{Attack Command}: \texttt{curl -X POST -d "cmd=wget..." http://192.168.1.6:80/upload.php}
+    \item \textbf{Detection}: Flagged by \texttt{packet\_inspector.py}.
+    \item \textbf{Generated Rule}: \texttt{alert tcp any any -> \$HOME\_NET 80 (content:"POST /upload.php..."; sid:1764805818; rev:1;)}
+    \item \textbf{Outcome}: Validation successful.
+\end{itemize}
+
+\section{Discussion and Troubleshooting}
+
+\subsection{Log Parsing and Normalization}
+Integrating Snort with a custom Python pipeline required overcoming significant log format discrepancies. Snort's native \texttt{alert\_fast} format differs from the Syslog format received by the AI Node. A robust regex parsing engine was developed in \texttt{parse\_logs.py} to normalize these inputs into a unified CSV structure, handling variations in timestamp formats and facility tags to ensure consistent feature extraction.
+
+\subsection{Rule Reloading Reliability}
+A persistent challenge was ensuring Snort 3 reloaded its configuration without dropping packets. The \texttt{approve\_rules.py} script implements a robust two-stage reload mechanism. It first attempts to send a \texttt{SIGHUP} signal to the specific Snort PID. If this fails, it falls back to a broader \texttt{pkill -HUP -f snort} command. This redundancy proved essential during long-running tests where PID files occasionally became stale.
+
+\subsection{Memory Management and OOM Errors}
+Processing 6.5 million records presented significant memory challenges. Initial training attempts resulted in ``OOM Killed'' errors on the Linux Mint server when loading the full CSVs into Pandas. 
+
+To mitigate this, a \textbf{Chunking Strategy} was implemented in \texttt{train\_model.py}. Additionally, a dynamic sampling rate was introduced:
+\begin{lstlisting}[language=Python]
+if len(df) > 50000:
+    df = df.sample(frac=SAMPLE_RATE, random_state=42)
+\end{lstlisting}
+The \texttt{TfidfVectorizer} was also optimized to limit feature dimensionality to 1000 features, significantly reducing RAM usage while maintaining classification accuracy.
+
+\subsection{Log4j Detection and Hybrid Efficacy}
+During Phase 2, a simulated Log4j attack payload (\texttt{\$\{jndi:ldap...\}}) was initially classified as "Benign" by the Random Forest model because the training dataset (CIC-IDS-2017) pre-dated the Log4j vulnerability. However, the \textbf{Isolation Forest} successfully flagged the packet as an anomaly due to its unusual character distribution and high entropy. This validated the hybrid architecture choice: the anomaly detector successfully covered the blind spot of the supervised classifier.
+
+The anomaly detector successfully covered the blind spot of the supervised classifier.
+
+\section{Ethical Considerations}
+
+The deployment of autonomous security systems introduces significant ethical and operational risks. The primary concern is the potential for "friendly fire," where legitimate traffic is misclassified and blocked, potentially disrupting critical business operations. Furthermore, the use of generative AI in security loops raises the "black box" problem, where the reasoning behind a specific rule generation may be opaque. To mitigate these risks, this project emphasizes a "human-on-the-loop" design where autonomous actions are logged, transparent, and reversible.
+
+\section{Future Work}
+
+While the current system demonstrates a functional proof-of-concept for autonomous defense, several avenues for future research and development remain:
+
+\subsection{Transition to Intrusion Prevention (IPS)}
+The current system operates in Passive Mode (IDS), detecting threats and generating alerts. A logical next step is to configure Snort in Inline Mode (IPS), allowing the system to actively drop packets matching the autonomously generated rules. This would require rigorous safety checks to prevent self-inflicted Denial of Service (DoS) due to false positives.
+
+\subsection{LLM Fine-Tuning}
+The current implementation uses a general-purpose Llama 3 model with prompt engineering. Fine-tuning a smaller model (e.g., Llama-3-8B or Mistral) specifically on a dataset of Snort rules and CVE descriptions could significantly improve inference speed and rule syntax accuracy, potentially allowing for deployment on lower-power edge devices.
+
+\subsection{Adversarial Robustness}
+As AI-driven defense evolves, so does AI-driven offense. Future work should evaluate the system's resilience against adversarial attacks designed to poison the anomaly detector or trick the LLM into generating ineffective rules.
+
+\section{Conclusion}
+
+Phase 3 of the capstone project has been successfully completed. A stable, dual-machine physical lab has been established, and a Snort 3 IDS has been installed and configured. Through extensive troubleshooting, a core project finding emerged: stateful TCP inspection was non-functional in the initial setup, necessitating a pivot to stateless rules which proved highly effective.
+
+The project successfully demonstrated that Generative AI can be reliably integrated into a critical security loop. By combining the statistical power of traditional Machine Learning with the semantic understanding of Large Language Models, the system achieved the capability to detect, analyze, and block novel threats without human intervention. The successful integration of local PCAP data and the validation of both SQL injection and HTTP exploits prove the viability of this architecture for next-generation autonomous defense.
+
+\section*{Acknowledgment}
+
+I would like to thank my capstone advisor, Dr. Zhang, for his guidance and support throughout this project. I also wish to acknowledge the Canadian Institute for Cybersecurity (CIC) for providing the CIC-IDS-2017 dataset, and the open-source communities behind Snort, Ollama, and Scikit-learn, whose tools made this project possible. Additionally, I thank Dr. Kim and the broader open source community for the tools and data sets utilized in this research.
+
+\section*{Availability}
+All files, scripts, documentation, and rule sets developed for this project are available on my GitHub repository at: \\
+\url{https://github.com/Idowza/autonomous-snort-ids}
+
+\begin{thebibliography}{00}
+
+\bibitem{b1} T. Preethi, P. R. Reddy, P. P. Kumar, L. Likhitha, and A. Kamani, ``A Novel Approach for Anomaly Detection using Snort Integrated with Machine Learning,'' in \textit{BVICAM}, New Delhi, India, 2024.
+
+\bibitem{b2} S. A. R. Shah and B. Issac, ``Performance comparison of intrusion detection systems and application of machine learning to Snort system,'' \textit{Future Generation Computer Systems}, vol. 80, pp. 157-170, 2018.
+
+\bibitem{b3} U. Aslam, E. Batool, S. N. Ahsan, and A. Sultan, ``Hybrid Network Intrusion Detection System Using Machine Learning Classification and Rule Based Learning System,'' \textit{International Journal of Grid and Distributed Computing}, vol. 10, no. 2, pp. 51-62, 2017.
+
+\bibitem{b4} V. Murgai, R. Stimpson, and R. S. Mantha, ``Enhancing Security and Reliability in Distributed Systems: A Hybrid Approach Integrating Snort Rules and Machine Learning for Anomaly Detection,'' in \textit{Proc. of the 2024 43rd International Symposium on Reliable Distributed Systems (SRDS)}, 2024.
+
+\bibitem{b5} F. Chbib, A. Mustafa, and R. Khatoun, ``Leveraging Machine Learning-Based PDF Malware Detection in Snort,'' in \textit{Proc. of the 2024 4th International Conference on Electrical, Computer, Communications and Mechatronics Engineering (ICECCME)}, Male, Maldives, 2024.
+
+\bibitem{b6} R. Ahsan, W. Shi, and J.-P. Corriveau, ``Network intrusion detection using machine learning approaches: Addressing data imbalance,'' \textit{IET Cyber-Physical Systems: Theory \& Applications}, vol. 7, no. 1, pp. 30-39, 2022.
+
+\bibitem{b7} W. Lian, C. Zhang, H. Zhang, B. Jia, and B. Liu, ``RuleMaster+: LLM-Based Automated Rule Generation Framework for Intrusion Detection Systems,'' \textit{Chinese Journal of Electronics}, vol. 34, no. 5, 2025.
+
+\end{thebibliography}
+
+\end{document}
