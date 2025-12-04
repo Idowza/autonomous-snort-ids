@@ -245,9 +245,13 @@ This project is licensed under the MIT License - see the `LICENSE` file for deta
 
 ## Acknowledgments
 
-I would like to thank my capstone advisor, Dr. Zhang, for his guidance and support throughout this project. I also wish to acknowledge the Canadian Institute for Cybersecurity (CIC) for providing the CIC-IDS-2017 dataset, and the open-source communities behind Snort, Ollama, and Scikit-learn, whose tools made this project possible. Additionally, I thank Dr. Kim and the broader open source community for the tools and data sets utilized in this research.
+I would like to thank my capstone advisor, Dr. Zhang, for his guidance and support throughout this project. I also wish to acknowledge the Canadian Institute for Cybersecurity (CIC) for providing the CIC-IDS-2017 dataset, and the open-source communities behind Snort, Ollama, and Scikit-learn, whose tools made this project possible. Additionally, I extend my gratitude to Dr. Kim, the instructor of EECS 994, for her evaluation and oversight of this project.
+
+## Availability
 
 All files, scripts, and documentation are available in this repository: https://github.com/Idowza/autonomous-snort-ids
+
+As a result of their size (more than 120 GB), the full training datasets and PCAP files are hosted separately on OneDrive: https://ndusbpos-my.sharepoint.com/:f:/g/personal/steven_iden_ndus_edu/IgDhMkXn1pLkQre811XoAkhEAWa_Lwo5zUMgldxKikeFqG8?e=1rg1Re
 
 ## Example Output & Validation
 
