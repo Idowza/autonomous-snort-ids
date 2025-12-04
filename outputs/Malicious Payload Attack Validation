@@ -1,0 +1,25 @@
+Run on Kali: sudo nc -lvnp 80
+
+Command: python3 validate_attack.py --sid 1764814496 --cmd "echo -n -e 'POST /upload.php HTTP/1.1\r\nHost: 192.168.1.6\r\nUser-Agent: curl/8.17.0\r\nAccept: */*\r\nContent-Length: ' | nc 192.168.1.44 80"
+
+steven@BTLST:~/Downloads/project_folder$ python3 validate_attack.py --sid 1764814496 --cmd "echo -n -e 'POST /upload.php HTTP/1.1\r\nHost: 192.168.1.6\r\nUser-Agent: curl/8.17.0\r\nAccept: */*\r\nContent-Length: ' | nc 192.168.1.44 80"
+==========================================
+   Automated Rule Validation System
+==========================================
+Log Source:    /var/log/snort_alerts.log
+Expected SID:  1764814496
+
+[1] Checking initial log state...
+    Current log size: 469127333 bytes
+
+[2] Executing Attack...
+
+[+] Launching Attack: echo -n -e 'POST /upload.php HTTP/1.1\r\nHost: 192.168.1.6\r\nUser-Agent: curl/8.17.0\r\nAccept: */*\r\nContent-Length: ' | nc 192.168.1.44 80
+    (Attack command timed out - this is normal for floods)
+
+[3] Waiting for logs to arrive (5s)...
+
+[4] Verifying Detection...
+
+[SUCCESS] Validation Passed! Rule Triggered.
+Captured Alert: 2025-12-03T20:18:08-06:00 kali snort: [1:1764814496:1] "Malicious Payload" {TCP} 192.168.1.6:41446 -> 192.168.1.44:80

@@ -1,0 +1,340 @@
+** caught reload-config signal
+Reload started. [signal]
+.. reloading configuration
+Reload update: start loading ... [signal]
+SO rules plugins will not be reloaded
+Loading /etc/snort/snort.lua:
+Loading snort_defaults.lua:
+Finished snort_defaults.lua:
+	active
+	alerts
+	daq
+	decode
+	host_cache
+	host_tracker
+	hosts
+	network
+	packets
+	process
+	search_engine
+	so_proxy
+	stream
+	stream_ip
+	stream_icmp
+	stream_user
+	dns
+	netflow
+	pop
+	trace
+	sip
+	ssl
+	port_scan
+	smtp
+	ftp_server
+	ftp_client
+	ftp_data
+	http_inspect
+	http2_inspect
+	output
+	suppress
+	classifications
+	ips
+	file_id
+	references
+	binder
+	wizard
+	appid
+	js_norm
+	file_policy
+	gtp_inspect
+	dce_http_server
+	dce_http_proxy
+	dce_udp
+	dce_tcp
+	dce_smb
+	s7commplus
+	modbus
+	mms
+	iec104
+	dnp3
+	cip
+	telnet
+	ssh
+	rpc_decode
+	normalizer
+	imap
+	back_orifice
+	arp_spoof
+	stream_file
+	stream_udp
+	stream_tcp
+Finished /etc/snort/snort.lua:
+Loading file_id.rules_file:
+Loading file_magic.rules:
+Finished file_magic.rules:
+Finished file_id.rules_file:
+Loading ips.rules:
+Loading /etc/snort/rules/local.rules:
+Finished /etc/snort/rules/local.rules:
+Loading /etc/snort/rules/snort3-community.rules:
+Finished /etc/snort/rules/snort3-community.rules:
+Loading /etc/snort/rules/ddos.rules:
+Finished /etc/snort/rules/ddos.rules:
+Loading /etc/snort/rules/experimental.rules:
+Finished /etc/snort/rules/experimental.rules:
+Loading /etc/snort/rules/x11.rules:
+Finished /etc/snort/rules/x11.rules:
+Loading /etc/snort/rules/includes.rules:
+Loading snort3-app-detect.rules:
+Finished snort3-app-detect.rules:
+Loading snort3-browser-chrome.rules:
+Finished snort3-browser-chrome.rules:
+Loading snort3-browser-firefox.rules:
+Finished snort3-browser-firefox.rules:
+Loading snort3-browser-ie.rules:
+Finished snort3-browser-ie.rules:
+Loading snort3-browser-other.rules:
+Finished snort3-browser-other.rules:
+Loading snort3-browser-plugins.rules:
+Finished snort3-browser-plugins.rules:
+Loading snort3-browser-webkit.rules:
+Finished snort3-browser-webkit.rules:
+Loading snort3-content-replace.rules:
+Finished snort3-content-replace.rules:
+Loading snort3-exploit-kit.rules:
+Finished snort3-exploit-kit.rules:
+Loading snort3-file-executable.rules:
+Finished snort3-file-executable.rules:
+Loading snort3-file-flash.rules:
+Finished snort3-file-flash.rules:
+Loading snort3-file-identify.rules:
+Finished snort3-file-identify.rules:
+Loading snort3-file-image.rules:
+Finished snort3-file-image.rules:
+Loading snort3-file-java.rules:
+Finished snort3-file-java.rules:
+Loading snort3-file-multimedia.rules:
+Finished snort3-file-multimedia.rules:
+Loading snort3-file-office.rules:
+Finished snort3-file-office.rules:
+Loading snort3-file-other.rules:
+Finished snort3-file-other.rules:
+Loading snort3-file-pdf.rules:
+Finished snort3-file-pdf.rules:
+Loading snort3-indicator-compromise.rules:
+Finished snort3-indicator-compromise.rules:
+Loading snort3-indicator-obfuscation.rules:
+Finished snort3-indicator-obfuscation.rules:
+Loading snort3-indicator-scan.rules:
+Finished snort3-indicator-scan.rules:
+Loading snort3-indicator-shellcode.rules:
+Finished snort3-indicator-shellcode.rules:
+Loading snort3-malware-backdoor.rules:
+Finished snort3-malware-backdoor.rules:
+Loading snort3-malware-cnc.rules:
+Finished snort3-malware-cnc.rules:
+Loading snort3-malware-other.rules:
+Finished snort3-malware-other.rules:
+Loading snort3-malware-tools.rules:
+Finished snort3-malware-tools.rules:
+Loading snort3-netbios.rules:
+Finished snort3-netbios.rules:
+Loading snort3-os-linux.rules:
+Finished snort3-os-linux.rules:
+Loading snort3-os-mobile.rules:
+Finished snort3-os-mobile.rules:
+Loading snort3-os-other.rules:
+Finished snort3-os-other.rules:
+Loading snort3-os-solaris.rules:
+Finished snort3-os-solaris.rules:
+Loading snort3-os-windows.rules:
+Finished snort3-os-windows.rules:
+Loading snort3-policy-multimedia.rules:
+Finished snort3-policy-multimedia.rules:
+Loading snort3-policy-other.rules:
+Finished snort3-policy-other.rules:
+Loading snort3-policy-social.rules:
+Finished snort3-policy-social.rules:
+Loading snort3-policy-spam.rules:
+Finished snort3-policy-spam.rules:
+Loading snort3-protocol-dns.rules:
+Finished snort3-protocol-dns.rules:
+Loading snort3-protocol-finger.rules:
+Finished snort3-protocol-finger.rules:
+Loading snort3-protocol-ftp.rules:
+Finished snort3-protocol-ftp.rules:
+Loading snort3-protocol-icmp.rules:
+Finished snort3-protocol-icmp.rules:
+Loading snort3-protocol-imap.rules:
+Finished snort3-protocol-imap.rules:
+Loading snort3-protocol-nntp.rules:
+Finished snort3-protocol-nntp.rules:
+Loading snort3-protocol-other.rules:
+Finished snort3-protocol-other.rules:
+Loading snort3-protocol-pop.rules:
+Finished snort3-protocol-pop.rules:
+Loading snort3-protocol-rpc.rules:
+Finished snort3-protocol-rpc.rules:
+Loading snort3-protocol-scada.rules:
+Finished snort3-protocol-scada.rules:
+Loading snort3-protocol-services.rules:
+Finished snort3-protocol-services.rules:
+Loading snort3-protocol-snmp.rules:
+Finished snort3-protocol-snmp.rules:
+Loading snort3-protocol-telnet.rules:
+Finished snort3-protocol-telnet.rules:
+Loading snort3-protocol-tftp.rules:
+Finished snort3-protocol-tftp.rules:
+Loading snort3-protocol-voip.rules:
+Finished snort3-protocol-voip.rules:
+Loading snort3-pua-adware.rules:
+Finished snort3-pua-adware.rules:
+Loading snort3-pua-other.rules:
+Finished snort3-pua-other.rules:
+Loading snort3-pua-p2p.rules:
+Finished snort3-pua-p2p.rules:
+Loading snort3-pua-toolbars.rules:
+Finished snort3-pua-toolbars.rules:
+Loading snort3-server-apache.rules:
+Finished snort3-server-apache.rules:
+Loading snort3-server-iis.rules:
+Finished snort3-server-iis.rules:
+Loading snort3-server-mail.rules:
+Finished snort3-server-mail.rules:
+Loading snort3-server-mssql.rules:
+Finished snort3-server-mssql.rules:
+Loading snort3-server-mysql.rules:
+Finished snort3-server-mysql.rules:
+Loading snort3-server-oracle.rules:
+Finished snort3-server-oracle.rules:
+Loading snort3-server-other.rules:
+Finished snort3-server-other.rules:
+Loading snort3-server-samba.rules:
+Finished snort3-server-samba.rules:
+Loading snort3-server-webapp.rules:
+Finished snort3-server-webapp.rules:
+Loading snort3-sql.rules:
+Finished snort3-sql.rules:
+Loading snort3-x11.rules:
+Finished snort3-x11.rules:
+Finished /etc/snort/rules/includes.rules:
+Finished ips.rules:
+Loading rule args:
+Loading /etc/snort/rules/local.rules:
+Finished /etc/snort/rules/local.rules:
+Finished rule args:
+--------------------------------------------------
+pcre counts
+               pcre_rules: 26786
+              pcre_native: 26786
+--------------------------------------------------
+ips policies rule stats
+              id  loaded  shared enabled    file
+               0   47714    4055   47714    /etc/snort/snort.lua
+--------------------------------------------------
+rule counts
+       total rules loaded: 47714
+          duplicate rules: 4055
+               text rules: 47087
+            builtin rules: 627
+            option chains: 47714
+            chain headers: 7162
+                 flowbits: 718
+     flowbits not checked: 69
+--------------------------------------------------
+port rule counts
+             tcp     udp    icmp      ip
+     any    2472     395     476     300
+     src    1253     163       0       0
+     dst    5376    1017       0       0
+    both     113      54       0       0
+   total    9214    1629     476     300
+--------------------------------------------------
+service rule counts          to-srv  to-cli
+                      bgp:        5       1
+                   dcerpc:     1724    1183
+                     dhcp:       37      10
+                     dnp3:        0       6
+                      dns:      277     123
+                     drda:        5       0
+                     file:     1058    1072
+                  file_id:      219     219
+                      ftp:      198      24
+                 ftp-data:     1142   11050
+                   gopher:        0       1
+                     http:    15813   14538
+                    http2:    15813   14538
+                    http3:    15813   14538
+                    ident:        1       0
+                     igmp:        1       1
+                     imap:     1191   11304
+                      ipp:        0       1
+                      irc:       40      14
+                     ircd:        9       3
+                 java_rmi:       55       3
+                 kerberos:       37       6
+                     ldap:       49       9
+                      ldp:        1       0
+                   modbus:       34      10
+                    mysql:       66       7
+              netbios-dgm:       11      11
+               netbios-ns:       15       5
+              netbios-ssn:     1613    1163
+                  netware:        2       0
+                     nntp:        2       2
+                      ntp:       37       7
+                  openvpn:       16      16
+                     pop3:     1148   11307
+               postgresql:       10       0
+                  printer:        6       1
+                   radius:        3       2
+                      rdp:       10      20
+                     rtmp:        1       4
+                      rtp:        1       1
+                     rtsp:       17       2
+                      sip:      340      44
+                     smtp:    10226    1099
+                     snmp:       49      10
+                     ssdp:       13       0
+                      ssh:       15       6
+                      ssl:      210     230
+                   sunrpc:      130       9
+                   syslog:        4       0
+                 teamview:        1       2
+                   telnet:       61      15
+                     tftp:       14       9
+                      vnc:        1       1
+               vnc-server:       12      10
+                     wins:        3       0
+                    total:    67559   82637
+--------------------------------------------------
+fast pattern groups
+                      src: 510
+                      dst: 1645
+                      any: 8
+                to_server: 131
+                to_client: 101
+--------------------------------------------------
+search engine (ac_bnfa)
+                instances: 1314
+                 patterns: 166626
+            pattern chars: 4144051
+               num states: 3198428
+         num match states: 440700
+             memory scale: MB
+             total memory: 102.173
+           pattern memory: 10.3071
+        match list memory: 53.857
+        transition memory: 37.8485
+        fast pattern only: 109055
+appid: MaxRss diff: 0
+appid: patterns loaded: 300
+No host attribute table loaded
+Reload update: start swapping configuration ... [signal]
+.. swapping configuration
+logger file reinitialized
+ReloadResourceTuner[0] start
+ReloadResourceTuner[0] complete
+Reload ended. [signal]
+== reload complete
+
