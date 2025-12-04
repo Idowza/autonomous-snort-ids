@@ -53,6 +53,11 @@ On the AI Node, a Python-based `packet_inspector.py` script utilizes **Scapy** t
     pip3 install pandas scikit-learn joblib ollama
     ```
 
+### Datasets
+
+The full training datasets and PCAP files used in this project are hosted on OneDrive due to their size:
+[Download Datasets](https://ndusbpos-my.sharepoint.com/:f:/g/personal/steven_iden_ndus_edu/IgDhMkXn1pLkQre811XoAkhEAWa_Lwo5zUMgldxKikeFqG8?e=1rg1Re)
+
 ### Lab Environment
 
 The lab consists of two bare metal machines on an isolated network:
