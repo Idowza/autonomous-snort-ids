@@ -119,30 +119,35 @@ Initial testing in the virtualized environment revealed persistent issues with s
 Five distinct custom rules were developed to detect specific attack vectors. Below is an explanation of these rules in a linguistic tone, describing the intent and logic behind each signature.
 
 \subsubsection{SSH Brute-Force Detection}
+\
 \begin{lstlisting}
 alert tcp any any -> $HOME_NET 22 (msg: "SSH Brute-Force Attempt"; flow:to_server, established; content: "SSH-", nocase; detection_filter: track by_src, count 5, seconds 60; sid: 1000002; rev:1;)
 \end{lstlisting}
 \textbf{Linguistic Explanation}: ``This rule monitors connection attempts to our SSH port (port 22). It acts as a tripwire for aggressive login attempts. I want it to track every source IP address individually. If it observes the same IP attempting to initiate an SSH handshake five times within a single 60-second window, it must trigger an alert. This behavior is a clear signature of an automated brute-force tool like Hydra.''
 
 \subsubsection{Nmap FIN Scan Detection}
+\
 \begin{lstlisting}
 alert tcp any any -> $HOME_NET any (msg: "Nmap FIN Scan Attempt"; flags: F,1; sid: 1000001; rev:1;)
 \end{lstlisting}
 \textbf{Linguistic Explanation}: ``This rule is designed to act as a silent alarm for stealthy reconnaissance. I want the system to inspect the TCP flags of every incoming packet. If it sees a packet where only the 'FIN' flag is set (and no others like SYN or ACK), it should immediately generate an alert. This is unnatural behavior in normal networking and is a specific fingerprint of an Nmap FIN scan used to map firewalls.''
 
 \subsubsection{ICMP Ping Sweep Detection}
+\
 \begin{lstlisting}
 alert icmp any any -> $HOME_NET any (msg: "ICMP Ping Sweep Detected"; itype:8; icode:0; detection_filter: track by_src, count 2, seconds 10; sid: 1000004; rev:1;)
 \end{lstlisting}
 \textbf{Linguistic Explanation}: ``This rule identifies attackers who are performing initial network mapping. I want it to watch for ICMP Echo Requests (Type 8). While a single ping is normal, a rapid succession is suspicious. If the same source sends two or more pings within 10 seconds, it triggers the alert, indicating an automated sweep is in progress.''
 
 \subsubsection{SQL Injection Detection}
+\
 \begin{lstlisting}
 alert udp any any -> $HOME_NET 3306 (content: "admin' UNION SELECT 1, database(), user()"; msg: "Possible SQL Injection"; metadata: former_category "Attempted Info Leak N-RPM"; sid:1764814600; rev:1;)
 \end{lstlisting}
 \textbf{Linguistic Explanation}: ``This rule looks for specific malicious payloads targeting database ports. I want the system to inspect the content of packets heading to port 3306 (MySQL). If the payload contains the exact string `admin' UNION SELECT', it is an unambiguous sign of an SQL injection attempt aiming to exfiltrate database structure and user details.''
 
 \subsubsection{Malicious Web Payload Detection}
+\
 \begin{lstlisting}
 alert tcp any any -> $HOME_NET 80 (
   content: "POST /upload.php HTTP/1.1\r\nHost: 192.168.1.6\r\nUser-Agent: curl/8.17.0\r\nAccept: */*\r\nContent-Length: "; 
@@ -160,7 +165,7 @@ Phase 2 focused on addressing the limitations of static rules by developing a hy
 To train a robust model, a massive dataset was aggregated. While public datasets provided a baseline, it was critical to include local traffic patterns. Two custom PCAP files were recorded and integrated:
 \begin{itemize}
     \item \texttt{2025-01-04-four-days-of-scans...pcap}: This capture contains four days of real-world noise, scanning activity, and web traffic hitting the exposed server.
-    \item \texttt{2025-06-20-traffic-from-running-the-malware.pcap}: This capture isolates the traffic patterns of the specific malware samples used for testing.
+    \item \texttt{2025-06-20-traffic-from...pcap}: This capture isolates the traffic patterns of the specific malware samples used for testing.
 \end{itemize}
 These PCAPs were processed through Snort 3 to generate log files, which were then parsed by the \texttt{parse\_logs.py} script.
 
@@ -315,8 +320,6 @@ The \texttt{TfidfVectorizer} was also optimized to limit feature dimensionality 
 \subsection{Log4j Detection and Hybrid Efficacy}
 During Phase 2, a simulated Log4j attack payload (\texttt{\$\{jndi:ldap...\}}) was initially classified as "Benign" by the Random Forest model because the training dataset (CIC-IDS-2017) pre-dated the Log4j vulnerability. However, the \textbf{Isolation Forest} successfully flagged the packet as an anomaly due to its unusual character distribution and high entropy. This validated the hybrid architecture choice: the anomaly detector successfully covered the blind spot of the supervised classifier.
 
-The anomaly detector successfully covered the blind spot of the supervised classifier.
-
 \section{Ethical Considerations}
 
 The deployment of autonomous security systems introduces significant ethical and operational risks. The primary concern is the potential for "friendly fire," where legitimate traffic is misclassified and blocked, potentially disrupting critical business operations. Furthermore, the use of generative AI in security loops raises the "black box" problem, where the reasoning behind a specific rule generation may be opaque. To mitigate these risks, this project emphasizes a "human-on-the-loop" design where autonomous actions are logged, transparent, and reversible.
@@ -336,7 +339,7 @@ As AI-driven defense evolves, so does AI-driven offense. Future work should eval
 
 \section{Conclusion}
 
-Phase 3 of the capstone project has been successfully completed. A stable, dual-machine physical lab has been established, and a Snort 3 IDS has been installed and configured. Through extensive troubleshooting, a core project finding emerged: stateful TCP inspection was non-functional in the initial setup, necessitating a pivot to stateless rules which proved highly effective.
+This project successfully established a stable, dual-machine physical lab, where a Snort 3 IDS has been installed and configured. Through extensive troubleshooting, a core project finding emerged: stateful TCP inspection was non-functional in the initial setup, necessitating a pivot to stateless rules which proved highly effective.
 
 The project successfully demonstrated that Generative AI can be reliably integrated into a critical security loop. By combining the statistical power of traditional Machine Learning with the semantic understanding of Large Language Models, the system achieved the capability to detect, analyze, and block novel threats without human intervention. The successful integration of local PCAP data and the validation of both SQL injection and HTTP exploits prove the viability of this architecture for next-generation autonomous defense.
 
@@ -347,6 +350,9 @@ I would like to thank my capstone advisor, Dr. Zhang, for his guidance and suppo
 \section*{Availability}
 All files, scripts, documentation, and rule sets developed for this project are available on my GitHub repository at: \\
 \url{https://github.com/Idowza/autonomous-snort-ids}
+
+\noindent Due to their size, the full training datasets and PCAP files are hosted separately on OneDrive: \\
+\url{https://ndusbpos-my.sharepoint.com/:f:/g/personal/steven_iden_ndus_edu/IgDhMkXn1pLkQre811XoAkhEAWa_Lwo5zUMgldxKikeFqG8?e=1rg1Re}
 
 \begin{thebibliography}{00}
 
