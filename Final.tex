@@ -33,7 +33,7 @@
 \begin{document}
 
 \title{Building an AI-Enhanced Autonomous Intrusion Detection System with Snort\\
-\thanks{This report represents the culmination of the EECS 994 Capstone Project.}
+{\large \textnormal{This report represents the culmination of the EECS 994 Capstone Project.}}
 }
 
 \author{\IEEEauthorblockN{Steven R. Iden}
@@ -63,6 +63,7 @@ Furthermore, the volume of modern network traffic makes manual rule generation u
 
 The overall goal of this semester-long project was to design and build a hybrid intrusion detection system that integrates a traditional rule-based engine with a machine learning model for enhanced classification and autonomous response. This report documents the complete work done throughout the semester, covering three distinct phases:
 \begin{enumerate}
+\vspace{0.5em}
     \item \textbf{Phase 1}: Deployment and validation of a custom rule-based system on physical hardware.
     \item \textbf{Phase 2}: Development of a hybrid machine learning pipeline for alert classification using massive public datasets.
     \item \textbf{Phase 3}: Implementation of an autonomous AI feedback loop using Large Language Models (LLMs) to write and validate rules.
@@ -101,7 +102,7 @@ The lab environment consists of three distinct nodes:
 The system utilizes a custom forwarding pipeline designed for low latency. Snort 3 captures packets on the monitored interface. Alerts are generated based on the active configuration and forwarded immediately to the AI Node via a dedicated Syslog stream (UDP 514, facility \texttt{local5}). This design decouples disk I/O from packet processing, ensuring the sensor maintains line-speed performance.
 
 \subsection{Parallel Packet Inspection}
-On the AI Node, a Python-based \texttt{packet\_inspector.py} script utilizes \textbf{Scapy} to sniff raw packets in parallel. This parallel inspection architecture is critical; it allows the system to inspect payload contents for anomalies even if Snort does not trigger an alert, effectively acting as a secondary, ML-driven sensor. The inspector applies strict pre-filtering to minimize noise:
+In the AI Node, a Python-based \texttt{packet\_inspector.py} script utilizes \textbf{Scapy} to sniff raw packets in parallel. This parallel inspection architecture is critical; it allows the system to inspect payload contents for anomalies even if Snort does not trigger an alert, effectively acting as a secondary, ML-driven sensor. The inspector applies strict pre-filtering to minimize noise:
 \begin{itemize}
     \item \textbf{Subnet Filtering}: Ignores traffic originating from the local 192.168.1.0/24 subnet, with the specific exception of the Kali sensor IP (192.168.1.44) to allow for internal testing.
     \item \textbf{Port Exclusion}: Traffic destined for management ports (SSH/22) and the logging stream itself (Syslog/514) is discarded to prevent feedback loops.
@@ -345,13 +346,13 @@ The project successfully demonstrated that Generative AI can be reliably integra
 
 \section*{Acknowledgment}
 
-I would like to thank my capstone advisor, Dr. Zhang, for his guidance and support throughout this project. I also wish to acknowledge the Canadian Institute for Cybersecurity (CIC) for providing the CIC-IDS-2017 dataset, and the open-source communities behind Snort, Ollama, and Scikit-learn, whose tools made this project possible. Additionally, I thank Dr. Kim and the broader open source community for the tools and data sets utilized in this research.
+I would like to thank my capstone advisor, Dr. Zhang, for his guidance and support throughout this project. I also wish to acknowledge the Canadian Institute for Cybersecurity (CIC) for providing the CIC-IDS-2017 dataset, and the open-source communities behind Snort, Ollama, and Scikit-learn, whose tools made this project possible. Additionally, I extend my gratitude to Dr. Kim, the instructor of EECS 994, for her evaluation and oversight of this project.
 
 \section*{Availability}
 All files, scripts, documentation, and rule sets developed for this project are available on my GitHub repository at:
 \url{https://github.com/Idowza/autonomous-snort-ids}
-
-Due to their size, the full training datasets and PCAP files are hosted separately on OneDrive:
+\\\\
+As a result of their size (more than 120 GB), the full training datasets and PCAP files are hosted separately on OneDrive:       
 \url{https://ndusbpos-my.sharepoint.com/:f:/g/personal/steven_iden_ndus_edu/IgDhMkXn1pLkQre811XoAkhEAWa_Lwo5zUMgldxKikeFqG8?e=1rg1Re}
 
 \begin{thebibliography}{00}
