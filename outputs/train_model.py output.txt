@@ -1,0 +1,115 @@
+sudo python3 train_model.py
+[sudo] password for steven:           
+
+--- Configuration ---
+Current default loading sample rate is 5.0%.
+Enter desired loading sample rate (0.01 to 1.0) or press Enter to keep default: 
+Using default sample rate.
+
+[+] Loading Local Snort Logs...
+
+[+] Processing CIC-IDS-2017 from /home/steven/Downloads/project_folder/datasets/cicids2017...
+    Processed Friday-WorkingHours-Morning.pcap_ISCX (copy).csv (9552 rows)
+    Processed CIC-IDS-2017-V2.csv (134758 rows)
+    Processed Thursday-WorkingHours-Morning-WebAttacks.pcap_ISCX.csv (8518 rows)
+    Processed Friday-WorkingHours-Afternoon-DDos.pcap_ISCX (copy).csv (11287 rows)
+    Processed Wednesday-workingHours.pcap_ISCX.csv (34635 rows)
+    Processed Tuesday-WorkingHours.pcap_ISCX (copy).csv (22295 rows)
+    Processed Thursday-WorkingHours-Afternoon-Infilteration.pcap_ISCX (copy).csv (14430 rows)
+    Processed Friday-WorkingHours-Afternoon-PortScan.pcap_ISCX (copy).csv (14323 rows)
+    Processed Monday-WorkingHours.pcap_ISCX.csv (26496 rows)
+    Processed Tuesday-WorkingHours.pcap_ISCX.csv (22295 rows)
+    Processed Friday-WorkingHours-Afternoon-PortScan.pcap_ISCX.csv (14323 rows)
+    Processed Friday-WorkingHours-Morning.pcap_ISCX.csv (9552 rows)
+    Processed Thursday-WorkingHours-Afternoon-Infilteration.pcap_ISCX.csv (14430 rows)
+    Processed Thursday-WorkingHours-Morning-WebAttacks.pcap_ISCX (copy).csv (22948 rows)
+    Processed Monday-WorkingHours.pcap_ISCX (copy).csv (26496 rows)
+    Processed Friday-WorkingHours-Afternoon-DDos.pcap_ISCX.csv (11287 rows)
+    Processed Wednesday-workingHours.pcap_ISCX (copy).csv (34635 rows)
+
+[+] Processing CSE-CIC-IDS2018 from /home/steven/Downloads/project_folder/datasets/cicids2018...
+    Processed wednesday_21_02_2018_benign_part3.csv (18548 rows)
+    Processed friday_02_03_2018_bot.csv (14305 rows)
+    Processed friday_16_02_2018_dos_slowhttp_part2.csv (5561 rows)
+    Processed thursday_01_03_2018_benign.csv (183885 rows)
+    Processed thursday_22_02_2018_benign.csv (232202 rows)
+    Processed friday_23_02_2018_BF_web.csv (246 rows)
+    Processed thursday_22_02_2018_SQL_Injection.csv (40 rows)
+    Processed friday_23_02_2018_benign.csv (223180 rows)
+    Processed wednesday_28_02_2018_benign.csv (270262 rows)
+    Processed thursday_15_02_2018_DoS_Slowloris.csv (8269 rows)
+    Processed wednesday_21_02_2018_benign_part2.csv (47986 rows)
+    Processed friday_16_02_2018_benign_part1.csv (164782 rows)
+    Processed wednesday_14_02_2018_BF_SSH.csv (9422 rows)
+    Processed friday_23_02_2018_BF_XSS.csv (148 rows)
+    Processed wednesday_14_02_2018_benign.csv (192277 rows)
+    Processed friday_16_02_2018_benign_part2.csv (27204 rows)
+    Processed friday_16_02_2018_dos_slowhttp_part1.csv (4999 rows)
+    Processed tuesday_20_02_2018_loic_http.csv (14476 rows)
+    Processed thursday_01_03_2018_infiltration.csv (5 rows)
+    Processed thursday_22_02_2018_BF_web.csv (290 rows)
+    Processed wednesday_21_02_2018_hoic_part1.csv (39992 rows)
+    Processed friday_16_02_2018_benign_part3.csv (2421 rows)
+    Processed thursday_15_02_2018_benign.csv (182687 rows)
+    Processed wednesday_14_02_2018_BF_FTP.csv (9668 rows)
+    Processed friday_23_02_2018_SQL_Injection.csv (66 rows)
+    Processed thursday_15_02_2018_DoS_Golden_Eye.csv (29485 rows)
+    Processed tuesday_20_02_2018_benign.csv (218374 rows)
+    Processed wednesday_21_02_2018_benign_part1.csv (150500 rows)
+    Processed wednesday_21_02_2018_benign_part4.csv (2597 rows)
+    Processed wednesday_21_02_2018_hoic_part2.csv (68238 rows)
+    Processed friday_16_02_2018_dos_hulk_part2.csv (56263 rows)
+    Processed thursday_22_02_2018_BF_XSS.csv (84 rows)
+    Processed friday_16_02_2018_dos_hulk_part1.csv (34960 rows)
+    Processed friday_02_03_2018_benign.csv (242466 rows)
+
+[+] Processing UNSW-NB15 (Original) from /home/steven/Downloads/project_folder/datasets/unsw_nb15...
+    Processed UNSW-NB15_3.csv (35000 rows)
+    Processed UNSW-NB15_4.csv (22002 rows)
+    Processed UNSW-NB15_2.csv (35000 rows)
+    Processed UNSW-NB15_1.csv (35000 rows)
+
+[+] Processing CIC-DDoS-2019 from /home/steven/Downloads/project_folder/datasets/cic_ddos_2019...
+    Processed DrDoS_LDAP.csv (109077 rows)
+    Processed DrDoS_UDP.csv (156840 rows)
+    Processed Syn.csv (79134 rows)
+    Processed UDPLag (copy).csv (36258 rows)
+    Processed DrDoS_DNS.csv (253721 rows)
+    Processed DrDoS_NTP.csv (60850 rows)
+    Processed DrDoS_SSDP.csv (130569 rows)
+    Processed DrDoS_SNMP.csv (258069 rows)
+    Processed LDAP.csv (105662 rows)
+    Processed Portmap.csv (9585 rows)
+    Processed TFTP.csv (1005391 rows)
+    Processed Syn (copy).csv (216027 rows)
+    Processed MSSQL.csv (288789 rows)
+    Processed DrDoS_NetBIOS.csv (204749 rows)
+    Processed UDP.csv (189110 rows)
+    Processed UDPLag.csv (18530 rows)
+    Processed DrDoS_MSSQL.csv (226225 rows)
+    Processed NetBIOS.csv (172795 rows)
+
+[+] Total Processed Records: 6536534
+    Raw Class Distribution: {1: 3928465, 0: 2608069}
+
+[!] WARNING: Dataset size is 6536534 records.
+    Training Random Forest on >5M records may crash RAM (OOM Killed).
+    Do you want to auto-downsample to 5M records to be safe? (y/n): n
+    [!] Proceeding with full dataset. Good luck!
+
+[+] Training Random Forest Classifier...
+              precision    recall  f1-score   support
+
+      Benign       1.00      1.00      1.00    521614
+   Malicious       1.00      1.00      1.00    785693
+
+    accuracy                           1.00   1307307
+   macro avg       1.00      1.00      1.00   1307307
+weighted avg       1.00      1.00      1.00   1307307
+
+
+[+] Training Isolation Forest Anomaly Detector...
+    [INFO] Sub-sampling benign data to 500k for Isolation Forest training speed...
+    Anomaly Detector saved.
+
+[SUCCESS] All models trained and saved.

@@ -1,0 +1,23 @@
+Command: python3 validate_attack.py --sid 1764814600 --cmd "echo \"admin' UNION SELECT 1, database(), user() -- \" | nc -u 192.168.1.44 3306"
+
+steven@BTLST:~/Downloads/project_folder$ python3 validate_attack.py --sid 1764814600 --cmd "echo \"admin' UNION SELECT 1, database(), user() -- \" | nc -u 192.168.1.44 3306"
+==========================================
+   Automated Rule Validation System
+==========================================
+Log Source:    /var/log/snort_alerts.log
+Expected SID:  1764814600
+
+[1] Checking initial log state...
+    Current log size: 469129440 bytes
+
+[2] Executing Attack...
+
+[+] Launching Attack: echo "admin' UNION SELECT 1, database(), user() -- " | nc -u 192.168.1.44 3306
+
+[3] Waiting for logs to arrive (5s)...
+
+[4] Verifying Detection...
+
+[SUCCESS] Validation Passed! Rule Triggered.
+Captured Alert: 2025-12-03T20:22:05-06:00 kali snort: [1:1764814600:1] "Possible SQL Injection" {UDP} 192.168.1.6:37609 -> 192.168.1.44:3306
+

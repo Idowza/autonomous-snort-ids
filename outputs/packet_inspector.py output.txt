@@ -1,0 +1,20 @@
+[+] Models loaded successfully.
+--- AI Packet Inspector Active on enp5s0 ---
+--- Ignoring Local Subnet 192.168.1.0/24 EXCEPT 192.168.1.44 ---
+Analyzing traffic...
+
+[ALARM] MALICIOUS PACKET from 192.168.1.44
+        Payload: admin' UNION SELECT 1, database(), user() --
+...
+    [!] AI Generating Rule for 192.168.1.44 -> Port 3306...
+        Proposed Rule: alert udp any any -> $HOME_NET 3306 (content:"admin' UNION SELECT 1, database(), user() -- "; msg:"Possible SQL Injection"; metadata: former_category "Attempted Info Leak N-RPM"; sid:1764814600; rev:1;)
+
+[ALARM] MALICIOUS PACKET from 192.168.1.44
+        Payload: POST /upload.php HTTP/1.1
+Host: 192.168.1.6
+User...
+    [!] AI Generating Rule for 192.168.1.44 -> Port 80...
+        Proposed Rule: alert tcp any any -> $HOME_NET 80 (content:"POST /upload.php HTTP/1.1\r\nHost: 192.168.1.6\r\nUser-Agent: curl/8.17.0\r\nAccept: */*\r\nContent-Length: "; msg:"Malicious Payload"; sid:1764814496; rev:1;)
+^Z
+[21]+  Stopped                 sudo python3 packet_inspector.py
+
