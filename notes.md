@@ -36,6 +36,8 @@ ollama run llama3
 ```bash
 sudo tail -f /var/log/snort_alerts.log
 ```
+
+# CIC-IDS-2017 Dataset
 http://cicresearch.ca/CICDataset/CIC-IDS-2017/Dataset/
 
 # Log File Permissions
