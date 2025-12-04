@@ -1,4 +1,4 @@
-graph TD
+Network Architecture Diagramgraph TD
     %% Main Network Cluster
     subgraph cluster_01 [Physical Lab Network 192.168.1.0/24]
         style cluster_01 fill:#f9f9f9,stroke:#333,stroke-width:2px
