@@ -195,8 +195,9 @@ The `validate_attack.py` script orchestrates the self-healing capability with a 
     # 2. Train the model and save it to disk
     python3 train_model.py
     
-    # 3. Simulate a new threat and generate a rule suggestion
-    python3 suggest_rule.py
+    # 3. Start the Real-Time AI Packet Inspector
+    # This script sniffs traffic, detects anomalies, and generates rules in real-time.
+    sudo python3 packet_inspector.py
 
     # (Optional) Run offline rule mining on historical data
     python3 mine_rules.py
@@ -204,13 +205,13 @@ The `validate_attack.py` script orchestrates the self-healing capability with a 
     # 4. Review and deploy the suggested rules
     python3 approve_rules.py
     ```
-    This will parse logs, train a hybrid model (Classifier + Anomaly Detector), detect threats, generate a new Snort rule using Llama 3, and allow for human-in-the-loop approval and deployment.
+    This will parse logs, train a hybrid model (Classifier + Anomaly Detector), detect threats in real-time, generate a new Snort rule using Llama 3, and allow for human-in-the-loop approval and deployment.
 
-5.  **Run the AI Pipeline (Interactive Method):** Alternatively, use the master script to run the entire pipeline interactively.
+5.  **Validate the New Rules:** Finally, verify that the deployed rules are working by re-launching the attack and checking for alerts.
     ```bash
-    python3 run_pipeline.py
+    python3 validate_attack.py --sid <SID> --cmd "<ATTACK_COMMAND>"
     ```
-    This script combines parsing, training, rule suggestion, and approval into a single interactive session.
+    This script monitors the logs, executes the attack, and confirms if the specific Snort ID (SID) triggered an alert.
 
 ## Project Status
 
