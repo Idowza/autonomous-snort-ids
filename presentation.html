@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Capstone Presentation - Steven R. Iden</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&family=Source+Code+Pro:wght@400;600&display=swap');
+
+        :root {
+            --bg-color: #1a1a1a;
+            --text-color: #e0e0e0;
+            --accent-color: #00bcd4;
+            --secondary-accent: #ff4081;
+            --code-bg: #2d2d2d;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Roboto', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            overflow: hidden;
+        }
+
+        /* Slide Container */
+        .slide {
+            height: 100vh;
+            width: 100vw;
+            display: none; /* Hidden by default */
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 40px;
+            box-sizing: border-box;
+            position: absolute;
+            top: 0;
+            left: 0;
+            opacity: 0;
+            transition: opacity 0.5s ease-in-out;
+        }
+
+        .slide.active {
+            display: flex;
+            opacity: 1;
+            z-index: 1;
+        }
+
+        /* Typography */
+        h1 {
+            font-size: 3.5rem;
+            color: var(--accent-color);
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        h2 {
+            font-size: 2.5rem;
+            color: var(--accent-color);
+            margin-bottom: 30px;
+            border-bottom: 2px solid var(--secondary-accent);
+            padding-bottom: 10px;
+        }
+
+        h3 {
+            font-size: 1.8rem;
+            color: #fff;
+            margin-top: 0;
+        }
+
+        p, li {
+            font-size: 1.5rem;
+            line-height: 1.6;
+            max-width: 1200px;
+        }
+
+        ul {
+            text-align: left;
+            margin-bottom: 30px;
+        }
+
+        li {
+            margin-bottom: 15px;
+        }
+
+        /* Layouts */
+        .two-column {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 50px;
+            width: 90%;
+            align-items: center;
+        }
+
+        .code-block {
+            background-color: var(--code-bg);
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'Source Code Pro', monospace;
+            font-size: 1.1rem;
+            border-left: 5px solid var(--secondary-accent);
+            text-align: left;
+            white-space: pre-wrap;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        .highlight {
+            color: var(--accent-color);
+            font-weight: bold;
+        }
+
+        .footer {
+            position: absolute;
+            bottom: 20px;
+            left: 40px;
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        .slide-number {
+            position: absolute;
+            bottom: 20px;
+            right: 40px;
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        /* Diagram Placeholder */
+        .diagram-box {
+            border: 2px dashed #666;
+            padding: 40px;
+            text-align: center;
+            color: #888;
+            background: #222;
+            border-radius: 10px;
+        }
+
+        /* Title Slide Specifics */
+        .title-slide h1 { font-size: 4.5rem; }
+        .title-slide p { font-size: 1.8rem; color: #aaa; }
+        .title-slide .details { margin-top: 50px; font-size: 1.4rem; }
+
+    </style>
+</head>
+<body>
+
+    <!-- Slide 1: Title -->
+    <div class="slide active title-slide" id="slide-1">
+        <h1>Building an AI-Enhanced<br>Autonomous Intrusion Detection System</h1>
+        <p>Integrating Snort 3, Hybrid Machine Learning, and Generative AI</p>
+        <div class="details">
+            <p><strong>Steven R. Iden</strong></p>
+            <p>EECS 994 Capstone Project</p>
+            <p>University of North Dakota</p>
+            <p>Fall 2025</p>
+        </div>
+        <div class="footer">Advisor: Dr. Zhang</div>
+        <div class="slide-number">1 / 16</div>
+    </div>
+
+    <!-- Slide 2: Agenda -->
+    <div class="slide" id="slide-2">
+        <h2>Presentation Agenda</h2>
+        <ul>
+            <li><strong>Introduction:</strong> The "Zero-Day" Problem</li>
+            <li><strong>System Architecture:</strong> Physical Hardware & Data Flow</li>
+            <li><strong>Phase 1:</strong> Rule-Based Deployment (Snort 3)</li>
+            <li><strong>Phase 2:</strong> Hybrid Machine Learning Pipeline</li>
+            <li><strong>Phase 3:</strong> Autonomous AI & Generative Logic</li>
+            <li><strong>Validation:</strong> Live Fire Case Studies</li>
+            <li><strong>Challenges & Conclusion</strong></li>
+        </ul>
+        <div class="slide-number">2 / 16</div>
+    </div>
+
+    <!-- Slide 3: Introduction -->
+    <div class="slide" id="slide-3">
+        <h2>The Problem: The Zero-Day Gap</h2>
+        <div class="two-column">
+            <div>
+                <h3>Traditional IDS Limitations</h3>
+                <ul>
+                    <li>Standard IDS (Snort/Suricata) relies on <strong>static signatures</strong>.</li>
+                    <li>They are reactive: A human must find the threat, write a rule, and deploy it.</li>
+                    <li><strong>The Gap:</strong> Between vulnerability disclosure and rule deployment, the network is defenseless.</li>
+                </ul>
+            </div>
+            <div>
+                <h3>The Solution: Autonomy</h3>
+                <p>We need a system that can:</p>
+                <ol>
+                    <li><strong>Detect</strong> unknown anomalies (Machine Learning).</li>
+                    <li><strong>Understand</strong> the payload (Generative AI).</li>
+                    <li><strong>Respond</strong> instantly (Automated Deployment).</li>
+                </ol>
+            </div>
+        </div>
+        <div class="slide-number">3 / 16</div>
+    </div>
+
+    <!-- Slide 4: System Architecture (Hardware) -->
+    <div class="slide" id="slide-4">
+        <h2>System Architecture: Bare Metal</h2>
+        <p>Unlike virtualized implementations, this project runs on physical hardware to ensure line-speed packet capture.</p>
+        <div class="two-column">
+            <div>
+                <ul>
+                    <li><strong>Sensor Node (192.168.1.44):</strong><br>Kali Linux running Snort 3 in promiscuous mode.</li>
+                    <li><strong>AI Node (192.168.1.6):</strong><br>Linux Mint (High Performance). Hosts Python pipeline & Ollama.</li>
+                    <li><strong>Gateway:</strong><br>OPNsense Router managing the isolated 192.168.1.0/24 subnet.</li>
+                </ul>
+            </div>
+            <div class="diagram-box">
+                <h3>[Network Architecture Diagram]</h3>
+                <p>Sensor Node (Kali) <---> Gateway <---> AI Node (Mint)</p>
+                <p>Data Flow: Syslog UDP 514 -> AI Engine -> SSH Response</p>
+            </div>
+        </div>
+        <div class="slide-number">4 / 16</div>
+    </div>
+
+    <!-- Slide 5: Data Flow Pipeline -->
+    <div class="slide" id="slide-5">
+        <h2>Data Flow Pipeline</h2>
+        <div class="code-block" style="font-size: 1.2rem;">
+1. Ingestion: Snort 3 captures packets on eth0.
+       |
+       v
+2. Dual Analysis Pathways:
+   |-- A. Real-Time (packet_inspector.py):
+   |      Sniffs live raw packets using Scapy.
+   |      Detects active attacks instantly.
+   |
+   |-- B. Historical Mining (mined_rules.py):
+   |      Scans old log archives (CSV/Syslog).
+   |      Finds patterns missed in real-time.
+       |
+       v
+3. Response: New rules generated (Llama 3) & pushed via SSH.
+        </div>
+        <p style="margin-top: 30px;">We combine <strong>Live Inspection</strong> for immediate threats with <strong>Historical Mining</strong> to catch slow, stealthy campaigns.</p>
+        <div class="slide-number">5 / 16</div>
+    </div>
+
+    <!-- Slide 6: Phase 1 - Rule Based -->
+    <div class="slide" id="slide-6">
+        <h2>Phase 1: Rule-Based Deployment</h2>
+        <p>Establishing a baseline defense against reconnaissance.</p>
+        <div class="code-block">
+# 1. SSH Brute Force (Tripwire)
+alert tcp any any -> $HOME_NET 22 (msg:"SSH Brute-Force"; ... detection_filter: count 5, seconds 60; ...)
+
+# 2. Nmap FIN Scan (Stealth Detection)
+alert tcp any any -> $HOME_NET any (msg:"Nmap FIN Scan"; flags: F,1; ...)
+
+# 3. ICMP Ping Sweep (Mapping Detection)
+alert icmp any any -> $HOME_NET any (msg:"Ping Sweep"; ... detection_filter: count 2, seconds 10; ...)
+        </div>
+        <p><strong>Result:</strong> Successfully detected baseline attacks using modern Snort 3 syntax.</p>
+        <div class="slide-number">6 / 16</div>
+    </div>
+
+    <!-- Slide 7: Phase 2 - Hybrid ML Pipeline -->
+    <div class="slide" id="slide-7">
+        <h2>Phase 2: Hybrid Machine Learning</h2>
+        <p>To detect threats that static rules miss, we aggregated <strong>6.5 Million Records</strong>.</p>
+        <div class="two-column">
+            <div>
+                <h3>Datasets Used</h3>
+                <ul>
+                    <li>CIC-IDS-2017 & 2018 (Web/DDoS)</li>
+                    <li>UNSW-NB15 (Exploits)</li>
+                    <li>CIC-DDoS-2019 (Volumetric)</li>
+                    <li><strong>Custom PCAPs (2025):</strong> 4 days of real internet noise + live malware traffic.</li>
+                </ul>
+            </div>
+            <div>
+                <h3>Feature Engineering</h3>
+                <ul>
+                    <li>TF-IDF Vectorization (Payload Text)</li>
+                    <li>Heuristic Counts ($, {, }, union, select)</li>
+                    <li>Message Length & Ports</li>
+                </ul>
+            </div>
+        </div>
+        <div class="slide-number">7 / 16</div>
+    </div>
+
+    <!-- Slide 8: The Hybrid Model Architecture -->
+    <div class="slide" id="slide-8">
+        <h2>The Hybrid Architecture</h2>
+        <p>A single classifier is insufficient for zero-day threats.</p>
+        
+        <div style="background: #333; padding: 30px; border-radius: 10px; width: 80%;">
+            <h3 style="color: var(--secondary-accent);">Logic: IF (A) OR (B) THEN ALERT</h3>
+            <hr style="border-color: #555;">
+            <div class="two-column" style="width: 100%;">
+                <div>
+                    <h4 style="color: var(--accent-color);">Model A: Random Forest</h4>
+                    <p><strong>Supervised Learning</strong></p>
+                    <p>Identifies <em>Known</em> Attacks (e.g., "This looks like DDoS").</p>
+                </div>
+                <div>
+                    <h4 style="color: var(--accent-color);">Model B: Isolation Forest</h4>
+                    <p><strong>Unsupervised Learning</strong></p>
+                    <p>Identifies <em>Anomalies</em> (e.g., "This packet violates statistical norms").</p>
+                </div>
+            </div>
+        </div>
+        <div class="slide-number">8 / 16</div>
+    </div>
+
+    <!-- Slide 9: Phase 3 - Autonomous AI -->
+    <div class="slide" id="slide-9">
+        <h2>Phase 3: Autonomous AI Loop</h2>
+        <p>Closing the loop with Generative AI for automatic rule writing.</p>
+        <div class="two-column">
+            <div>
+                <h3>Model Selection: Llama 3.1 (8b)</h3>
+                <ul>
+                    <li><strong>Why not Cloud (GPT-4)?</strong> Privacy risks sending logs to cloud.</li>
+                    <li><strong>Winner:</strong> Llama 3.1:8b provided the best balance of speed (sub-second inference) and strict syntax adherence.</li>
+                </ul>
+                <h3 style="margin-top: 20px;">Dual Rule Engines</h3>
+                <ul>
+                    <li><strong>Packet Inspector:</strong> Sniffs live wire for instant rule generation.</li>
+                    <li><strong>Mined Rules:</strong> Batches old logs to find trends over time.</li>
+                </ul>
+            </div>
+            <div>
+                <h3>The Challenge: Hallucinations</h3>
+                <p>Early attempts failed because AI would output conversational text:</p>
+                <div class="code-block" style="color: #ff5252;">"Here is the rule you asked for: alert tcp..."</div>
+                <p>This breaks the Snort parser.</p>
+            </div>
+        </div>
+        <div class="slide-number">9 / 16</div>
+    </div>
+
+    <!-- Slide 10: Sanitization Strategy -->
+    <div class="slide" id="slide-10">
+        <h2>Engineering Solution: Sanitization</h2>
+        <p>We built a robust compilation layer in <code>packet_inspector.py</code>.</p>
+        
+        <div class="code-block">
+# 1. Greedy Regex Extraction
+match = re.search(r'(alert\s+.*\))', raw_llm_output)
+
+# 2. Syntax Validation
+if rule.count('"') % 2 != 0:
+    discard_rule() # Unbalanced quotes
+
+# 3. Metadata Injection
+if "sid:" not in rule:
+    inject_unique_sid()
+        </div>
+        <p>This ensures only valid, executable code is pushed to the sensor.</p>
+        <div class="slide-number">10 / 16</div>
+    </div>
+
+    <!-- Slide 11: Validation Mechanism -->
+    <div class="slide" id="slide-11">
+        <h2>Self-Healing: The Validation Loop</h2>
+        <p>How do we know the generated rule works?</p>
+        <ol style="font-size: 1.6rem; margin-left: 20%;">
+            <li><strong>Snapshot:</strong> Record current log file size.</li>
+            <li><strong>Replay:</strong> Re-launch the exact attack payload (e.g., SQLi string) against the sensor.</li>
+            <li><strong>Verify:</strong> Monitor logs for 5 seconds.</li>
+            <li><strong>Confirm:</strong> If the specific new SID appears, the rule is valid.</li>
+        </ol>
+        <div class="slide-number">11 / 16</div>
+    </div>
+
+    <!-- Slide 12: Results - Case Study 1 -->
+    <div class="slide" id="slide-12">
+        <h2>Case Study 1: SQL Injection</h2>
+        <div class="code-block">
+Attack Payload:
+"admin' UNION SELECT 1, database(), user() --"
+        </div>
+        <p><strong>System Response:</strong></p>
+        <div class="code-block">
+alert udp any any -> $HOME_NET 3306 (
+    content:"admin' UNION SELECT 1..."; 
+    msg:"Possible SQL Injection"; 
+    sid:1764814600; rev:1;
+)
+        </div>
+        <p style="color: var(--accent-color);">[SUCCESS] Validation Passed! Rule Triggered.</p>
+        <div class="slide-number">12 / 16</div>
+    </div>
+
+    <!-- Slide 13: Results - Case Study 2 -->
+    <div class="slide" id="slide-13">
+        <h2>Case Study 2: HTTP Exploitation</h2>
+        <div class="code-block">
+Attack Payload:
+POST /upload.php ... User-Agent: curl/8.17.0
+        </div>
+        <p><strong>System Response:</strong></p>
+        <div class="code-block">
+alert tcp any any -> $HOME_NET 80 (
+    content:"POST /upload.php"; 
+    content:"User-Agent: curl/8.17.0";
+    msg:"Malicious Payload"; 
+    sid:1764814496; rev:1;
+)
+        </div>
+        <p style="color: var(--accent-color);">[SUCCESS] Validation Passed! Rule Triggered.</p>
+        <div class="slide-number">13 / 16</div>
+    </div>
+
+    <!-- Slide 14: Challenges & Limitations -->
+    <div class="slide" id="slide-14">
+        <h2>Challenges & Limitations</h2>
+        <div class="two-column">
+            <div>
+                <h3>Memory (OOM Killed)</h3>
+                <p>Loading 6.5M records crashed the AI node.</p>
+                <p><strong>Solution:</strong> Implemented data chunking and reduced TF-IDF dimensionality to 1000 features.</p>
+            </div>
+            <div>
+                <h3>Encrypted Traffic</h3>
+                <p>The current system relies on Deep Packet Inspection (DPI) of payloads.</p>
+                <p><strong>Future Work:</strong> Integrate JA3 fingerprinting for TLS traffic analysis.</p>
+            </div>
+        </div>
+        <div class="slide-number">14 / 16</div>
+    </div>
+
+    <!-- Slide 15: Conclusion -->
+    <div class="slide" id="slide-15">
+        <h2>Conclusion</h2>
+        <ul>
+            <li>We successfully built a <strong>Self-Healing Network Defense System</strong>.</li>
+            <li><strong>Hybrid AI</strong> (RF + IF) successfully detects both known and zero-day threats.</li>
+            <li><strong>Generative AI</strong> (Llama 3) can reliably write Snort rules when properly sanitized.</li>
+            <li><strong>Physical Deployment</strong> ensures the system handles real-world line speeds.</li>
+            <li>All objectives of the Capstone were met and exceeded.</li>
+        </ul>
+        <div class="slide-number">15 / 16</div>
+    </div>
+
+    <!-- Slide 16: End -->
+    <div class="slide" id="slide-16">
+        <h1>Questions?</h1>
+        <p>Code available at: <br> 
+        <a href="https://github.com/Idowza/autonomous-snort-ids" style="color: var(--accent-color);">github.com/Idowza/autonomous-snort-ids</a></p>
+        
+        <div class="details" style="margin-top: 50px;">
+            <h3>Acknowledgments</h3>
+            <p style="font-size: 1.2rem;">Special thanks to Dr. Zhang (Advisor) for guidance.<br>
+            Thanks to the Canadian Institute for Cybersecurity (CIC), Dr. Kim,<br>
+            and the open-source communities behind Snort, Ollama, and Scikit-learn.</p>
+        </div>
+        <div class="slide-number">16 / 16</div>
+    </div>
+
+    <script>
+        let currentSlide = 1;
+        const totalSlides = 16;
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight' || e.key === ' ') {
+                if (currentSlide < totalSlides) {
+                    document.getElementById(`slide-${currentSlide}`).classList.remove('active');
+                    currentSlide++;
+                    document.getElementById(`slide-${currentSlide}`).classList.add('active');
+                }
+            } else if (e.key === 'ArrowLeft') {
+                if (currentSlide > 1) {
+                    document.getElementById(`slide-${currentSlide}`).classList.remove('active');
+                    currentSlide--;
+                    document.getElementById(`slide-${currentSlide}`).classList.add('active');
+                }
+            }
+        });
+    </script>
+</body>
+</html>
